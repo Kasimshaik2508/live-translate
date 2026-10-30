@@ -7,12 +7,12 @@
 <style>
   :root {
     --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66;
-    --line: #e4e4df; --accent: #2457d6; --accent-text: #ffffff; --live: #d62f2f;
+    --line: #e4e4df; --accent: #2457d6; --accent-text: #ffffff; --live: #d62f2f; --level: #2f9e5b;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #151514; --panel: #1f1f1d; --text: #ececea; --muted: #9a9a94;
-      --line: #33332f; --accent: #6d93ff; --accent-text: #0d0d0c; --live: #ff6b6b;
+      --line: #33332f; --accent: #6d93ff; --accent-text: #0d0d0c; --live: #ff6b6b; --level: #4cc27f;
     }
   }
   * { box-sizing: border-box; }
@@ -24,6 +24,7 @@
   h1 { font-size: 1.4rem; margin: 0 0 16px; }
   .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; }
   label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--muted); }
+  .fixed { color: var(--text); font-size: 1rem; padding: 8px 0; }
   select, input[type=text] {
     font: inherit; color: var(--text); background: var(--panel);
     border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
@@ -34,8 +35,12 @@
   }
   button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
   button.live { background: var(--live); }
-  #status { font-size: .9rem; color: var(--muted); min-height: 1.5em; margin-bottom: 12px; }
+  .statusbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; min-height: 1.5em; }
+  #status { font-size: .9rem; color: var(--muted); }
   #status.live::before { content: "● "; color: var(--live); }
+  .meter { width: 80px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .meter[hidden] { display: none; }
+  .meter > div { height: 100%; width: 0; background: var(--level); transition: width .08s linear; }
   #log { display: flex; flex-direction: column; gap: 10px; }
   .row {
     display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
@@ -44,6 +49,7 @@
   .row .src { color: var(--muted); }
   .row .dst { font-weight: 500; }
   .row.interim .src { font-style: italic; }
+  .row.interim .dst:empty::after { content: ""; }
   .row .dst:empty::after { content: "…"; color: var(--muted); }
   .tag {
     display: inline-block; margin-bottom: 4px; padding: 0 8px; border-radius: 999px;
@@ -61,8 +67,11 @@
 <main>
   <h1>Live Translate</h1>
   <div class="controls">
-    <label>I'm speaking
-      <select id="source"></select>
+    <label>Mode
+      <select id="mode">
+        <option value="continuous">Continuous (fastest)</option>
+        <option value="sentences">Sentence by sentence (most accurate)</option>
+      </select>
     </label>
     <label>Translate to
       <select id="target"></select>
@@ -70,7 +79,10 @@
     <button id="toggle">Start listening</button>
     <button id="clear" class="secondary">Clear</button>
   </div>
-  <div id="status"></div>
+  <div class="statusbar">
+    <div class="meter" id="meter" hidden title="Microphone level"><div></div></div>
+    <div id="status"></div>
+  </div>
   <div id="log"></div>
   <form class="typed" id="typed">
     <input type="text" id="typedText" placeholder="Or type something to translate">
@@ -79,32 +91,23 @@
 </main>
 <script>
 const LANGS = [
-  ["en-US", "English"], ["es-ES", "Spanish"], ["fr-FR", "French"], ["de-DE", "German"],
-  ["it-IT", "Italian"], ["pt-BR", "Portuguese"], ["nl-NL", "Dutch"], ["ru-RU", "Russian"],
-  ["uk-UA", "Ukrainian"], ["pl-PL", "Polish"], ["tr-TR", "Turkish"], ["ar-SA", "Arabic"],
-  ["hi-IN", "Hindi"], ["ur-PK", "Urdu"], ["bn-BD", "Bengali"], ["zh-CN", "Chinese (Mandarin)"],
+  ["en-US", "English"], ["hi-IN", "Hindi"], ["es-ES", "Spanish"], ["fr-FR", "French"],
+  ["de-DE", "German"], ["it-IT", "Italian"], ["pt-BR", "Portuguese"], ["nl-NL", "Dutch"],
+  ["ru-RU", "Russian"], ["uk-UA", "Ukrainian"], ["pl-PL", "Polish"], ["tr-TR", "Turkish"],
+  ["ar-SA", "Arabic"], ["ur-PK", "Urdu"], ["bn-BD", "Bengali"], ["zh-CN", "Chinese (Mandarin)"],
   ["ja-JP", "Japanese"], ["ko-KR", "Korean"], ["vi-VN", "Vietnamese"], ["id-ID", "Indonesian"],
   ["sw-KE", "Swahili"],
 ];
-// Auto mode listens with the Hindi (India) recognizer, which also picks up English words,
-// and leaves working out the actual language(s) to the model.
-const AUTO = { code: "auto", name: "Auto-detect (Hindi, English or a mix)", recognizer: "hi-IN" };
 const $ = (id) => document.getElementById(id);
-const nameOf = (code) => (code === AUTO.code ? AUTO.name : LANGS.find(([c]) => c === code)[1]);
-const recognizerLang = (code) => (code === AUTO.code ? AUTO.recognizer : code);
+const targetName = () => LANGS.find(([c]) => c === $("target").value)[1];
 
-$("source").add(new Option(AUTO.name, AUTO.code));
-for (const sel of [$("source"), $("target")]) {
-  for (const [code, name] of LANGS) sel.add(new Option(name, code));
-}
+for (const [code, name] of LANGS) $("target").add(new Option(name, code));
 const saved = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
-$("source").value = saved("source", AUTO.code);
 $("target").value = saved("target", "en-US");
-
-// Recent finished turns, sent along so the model keeps names and context consistent.
-const history = [];
-const MAX_HISTORY = 6;
+if (!$("target").value) $("target").value = "en-US";
+$("mode").value = saved("mode", "continuous");
+if (!$("mode").value) $("mode").value = "continuous";
 
 function setStatus(text, live = false) {
   $("status").textContent = text;
@@ -133,103 +136,196 @@ function parseReply(raw) {
   return { lang: "", text: raw };  // error message, or the model skipped the tag
 }
 
-async function translate(text, row) {
-  const dst = row.querySelector(".dst");
-  const tag = row.querySelector(".tag");
+function showReply(row, raw) {
+  const reply = parseReply(raw);
+  row.querySelector(".tag").textContent = reply.lang;
+  row.querySelector(".dst").textContent = reply.text;
+  return reply;
+}
+
+// --- Typed text: one request per line, with recent lines as context ---
+const typedHistory = [];
+
+async function translateTyped(text, row) {
   const res = await fetch("/api/translate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      text,
-      source_lang: nameOf($("source").value),
-      target_lang: nameOf($("target").value),
-      history: history.slice(-MAX_HISTORY),
+      text, source_lang: "auto-detect", target_lang: targetName(), history: typedHistory.slice(-6),
     }),
   });
-  if (!res.ok) { dst.textContent = `[error: server returned ${res.status}]`; return; }
+  if (!res.ok) { row.querySelector(".dst").textContent = `[error: server returned ${res.status}]`; return; }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
-  let raw = "";
-  let reply = { lang: "", text: "" };
+  let raw = "", reply;
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
     raw += decoder.decode(value, { stream: true });
-    reply = parseReply(raw);
-    tag.textContent = reply.lang;
-    dst.textContent = reply.text;
+    reply = showReply(row, raw);
   }
-  if (!reply.text.startsWith("[error")) history.push({ source: text, translation: reply.text });
+  if (reply && !reply.text.startsWith("[error")) typedHistory.push({ source: text, translation: reply.text });
 }
 
-// --- Speech recognition (Chrome, Edge, Safari) ---
-const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recognizer = null;
-let listening = false;
-let interimRow = null;
-
-function startListening() {
-  recognizer = new Recognition();
-  recognizer.lang = recognizerLang($("source").value);
-  recognizer.continuous = true;
-  recognizer.interimResults = true;
-
-  recognizer.onresult = (event) => {
-    let interim = "";
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const result = event.results[i];
-      const text = result[0].transcript.trim();
-      if (!text) continue;
-      if (result.isFinal) {
-        if (interimRow) { interimRow.remove(); interimRow = null; }
-        translate(text, addRow(text));
-      } else {
-        interim += text + " ";
+// --- Live listening: stream 16 kHz 16-bit mono PCM to the server in 100 ms chunks ---
+const WORKLET = `
+class Pcm16 extends AudioWorkletProcessor {
+  constructor() { super(); this.buf = new Int16Array(1600); this.n = 0; this.peak = 0; }
+  process(inputs) {
+    const ch = inputs[0][0];
+    if (ch) for (let i = 0; i < ch.length; i++) {
+      const s = Math.max(-1, Math.min(1, ch[i]));
+      if (Math.abs(s) > this.peak) this.peak = Math.abs(s);
+      this.buf[this.n++] = s < 0 ? s * 0x8000 : s * 0x7fff;
+      if (this.n === this.buf.length) {
+        this.port.postMessage({ pcm: this.buf.buffer, peak: this.peak }, [this.buf.buffer]);
+        this.buf = new Int16Array(1600); this.n = 0; this.peak = 0;
       }
     }
-    if (interim) {
-      if (!interimRow) interimRow = addRow("", true);
-      interimRow.querySelector(".src").textContent = interim.trim();
-    }
-  };
-  recognizer.onerror = (event) => {
-    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-      stopListening();
-      setStatus("Microphone access was blocked. Allow it in the browser and try again.");
-    } else if (event.error !== "no-speech" && event.error !== "aborted") {
-      setStatus(`Speech recognition error: ${event.error}`, listening);
-    }
-  };
-  // The browser ends recognition after silence; restart while the user still wants to listen.
-  recognizer.onend = () => { if (listening) recognizer.start(); };
+    return true;
+  }
+}
+registerProcessor("pcm16", Pcm16);`;
 
-  recognizer.start();
+let listening = false;
+let mic = null, audioCtx = null, socket = null, interimRow = null, lastError = "";
+const rows = new Map();
+
+// Continuous mode: heard and translated words arrive as separate streams of fragments.
+// A pause starts a new line; translations fill lines in order, moving to the next line
+// once the current one's translation ends a sentence or goes quiet.
+const PAUSE_MS = 1500;
+const live = { lines: [], heardAt: 0, outIndex: 0, outAt: 0 };
+const endsSentence = (text) => /[.?!।]\s*$/.test(text);
+
+function appendText(el, fragment) {
+  el.textContent = (el.textContent + fragment).replace(/^\s+/, "");
+}
+
+function onHeard(fragment) {
+  const now = Date.now();
+  let line = live.lines.at(-1);
+  const src = line?.querySelector(".src").textContent ?? "";
+  const longSentence = src.length > 160 && endsSentence(src);
+  if (!line || now - live.heardAt > PAUSE_MS || longSentence) {
+    line = addRow("");
+    live.lines.push(line);
+  }
+  live.heardAt = now;
+  appendText(line.querySelector(".src"), fragment);
+}
+
+function onTranslated(fragment) {
+  const now = Date.now();
+  if (!live.lines.length) live.lines.push(addRow(""));
+  let line = live.lines[live.outIndex];
+  const dst = line.querySelector(".dst").textContent;
+  const hasNewer = live.outIndex < live.lines.length - 1;
+  if (hasNewer && dst && (endsSentence(dst) || now - live.outAt > PAUSE_MS)) {
+    live.outIndex += 1;
+    line = live.lines[live.outIndex];
+  }
+  live.outAt = now;
+  appendText(line.querySelector(".dst"), fragment);
+  line.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+function handleMessage(msg) {
+  if (msg.type === "status") {
+    setStatus("Listening… speak in Hindi, English or both", true);
+  } else if (msg.type === "heard") {
+    onHeard(msg.text);
+  } else if (msg.type === "translated") {
+    onTranslated(msg.text);
+  } else if (msg.type === "interim") {
+    if (!interimRow) interimRow = addRow("", true);
+    interimRow.querySelector(".src").textContent = msg.text;
+  } else if (msg.type === "final") {
+    if (interimRow) { interimRow.remove(); interimRow = null; }
+    rows.set(msg.id, addRow(msg.text));
+  } else if (msg.type === "translation") {
+    const row = rows.get(msg.id);
+    if (row) showReply(row, msg.text);
+  } else if (msg.type === "error") {
+    lastError = msg.text;
+    setStatus(`Error: ${msg.text}`, listening);
+  }
+}
+
+async function startListening() {
+  lastError = "";
+  setStatus("Starting…");
+  try {
+    mic = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true },
+    });
+  } catch {
+    setStatus("Microphone access was blocked. Allow it for this site and try again.");
+    return;
+  }
   listening = true;
   $("toggle").textContent = "Stop";
   $("toggle").classList.add("live");
-  setStatus(`Listening in ${nameOf($("source").value)}…`, true);
+  $("meter").hidden = false;
+
+  // The browser resamples the microphone to 16 kHz for us.
+  audioCtx = new AudioContext({ sampleRate: 16000 });
+  const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
+  await audioCtx.audioWorklet.addModule(url);
+  const worklet = new AudioWorkletNode(audioCtx, "pcm16");
+  audioCtx.createMediaStreamSource(mic).connect(worklet);
+  worklet.connect(audioCtx.destination);  // outputs silence; keeps the node running
+
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  live.lines = []; live.outIndex = 0;
+  const params = new URLSearchParams({
+    target: targetName(), target_code: $("target").value.split("-")[0], mode: $("mode").value,
+  });
+  socket = new WebSocket(`${proto}://${location.host}/ws?${params}`);
+  socket.binaryType = "arraybuffer";
+  const pending = [];  // audio captured while the connection opens
+  socket.onopen = () => { for (const chunk of pending.splice(0)) socket.send(chunk); };
+  socket.onmessage = (event) => handleMessage(JSON.parse(event.data));
+  socket.onclose = () => {
+    if (!listening) return;
+    stopListening();
+    setStatus(lastError ? `Error: ${lastError}` : "Connection closed. Press Start listening again.");
+  };
+  worklet.port.onmessage = ({ data }) => {
+    $("meter").firstElementChild.style.width = `${Math.min(100, data.peak * 140)}%`;
+    if (socket.readyState === WebSocket.OPEN) socket.send(data.pcm);
+    else if (socket.readyState === WebSocket.CONNECTING) pending.push(data.pcm);
+  };
 }
 
 function stopListening() {
   listening = false;
-  if (recognizer) recognizer.stop();
+  if (socket) socket.close();
+  if (mic) mic.getTracks().forEach((t) => t.stop());
+  if (audioCtx) audioCtx.close();
+  socket = mic = audioCtx = null;
   if (interimRow) { interimRow.remove(); interimRow = null; }
   $("toggle").textContent = "Start listening";
   $("toggle").classList.remove("live");
+  $("meter").hidden = true;
   setStatus("Stopped.");
 }
 
-if (!Recognition) {
+if (!navigator.mediaDevices?.getUserMedia || !window.AudioWorkletNode) {
   $("toggle").disabled = true;
-  setStatus("This browser has no speech recognition. Use Chrome, Edge or Safari, or type below.");
+  setStatus("This browser can't record audio here. Use a current Chrome, Edge or Safari, or type below.");
 }
 
 $("toggle").onclick = () => (listening ? stopListening() : startListening());
-$("clear").onclick = () => { $("log").replaceChildren(); history.length = 0; };
-for (const id of ["source", "target"]) {
+$("clear").onclick = () => {
+  $("log").replaceChildren();
+  rows.clear(); interimRow = null; typedHistory.length = 0;
+  live.lines = []; live.outIndex = 0;
+};
+for (const id of ["target", "mode"]) {
   $(id).onchange = () => {
     save(id, $(id).value);
-    if (id === "source" && listening) { stopListening(); startListening(); }
+    if (listening) { stopListening(); startListening(); }
   };
 }
 $("typed").onsubmit = (e) => {
@@ -237,7 +333,7 @@ $("typed").onsubmit = (e) => {
   const text = $("typedText").value.trim();
   if (!text) return;
   $("typedText").value = "";
-  translate(text, addRow(text));
+  translateTyped(text, addRow(text));
 };
 </script>
 </body>
