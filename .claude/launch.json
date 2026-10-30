@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {"name": "live-translate", "runtimeExecutable": "uv", "runtimeArgs": ["run", "uvicorn", "server:app", "--port", "8010"], "port": 8010}
+  ]
+}

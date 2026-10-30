@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Translate</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66;
+    --line: #e4e4df; --accent: #2457d6; --accent-text: #ffffff; --live: #d62f2f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151514; --panel: #1f1f1d; --text: #ececea; --muted: #9a9a94;
+      --line: #33332f; --accent: #6d93ff; --accent-text: #0d0d0c; --live: #ff6b6b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.4rem; margin: 0 0 16px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--muted); }
+  select, input[type=text] {
+    font: inherit; color: var(--text); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  }
+  button {
+    font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 9px 18px;
+    background: var(--accent); color: var(--accent-text); cursor: pointer;
+  }
+  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button.live { background: var(--live); }
+  #status { font-size: .9rem; color: var(--muted); min-height: 1.5em; margin-bottom: 12px; }
+  #status.live::before { content: "● "; color: var(--live); }
+  #log { display: flex; flex-direction: column; gap: 10px; }
+  .row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+  }
+  .row .src { color: var(--muted); }
+  .row .dst { font-weight: 500; }
+  .row.interim .src { font-style: italic; }
+  .row .dst:empty::after { content: "…"; color: var(--muted); }
+  .tag {
+    display: inline-block; margin-bottom: 4px; padding: 0 8px; border-radius: 999px;
+    font-size: .75rem; color: var(--muted); border: 1px solid var(--line);
+  }
+  .tag:empty { display: none; }
+  form.typed { display: flex; gap: 8px; margin-top: 20px; }
+  form.typed input { flex: 1; }
+  @media (max-width: 600px) {
+    .row { grid-template-columns: 1fr; gap: 4px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Live Translate</h1>
+  <div class="controls">
+    <label>I'm speaking
+      <select id="source"></select>
+    </label>
+    <label>Translate to
+      <select id="target"></select>
+    </label>
+    <button id="toggle">Start listening</button>
+    <button id="clear" class="secondary">Clear</button>
+  </div>
+  <div id="status"></div>
+  <div id="log"></div>
+  <form class="typed" id="typed">
+    <input type="text" id="typedText" placeholder="Or type something to translate">
+    <button type="submit" class="secondary">Translate</button>
+  </form>
+</main>
+<script>
+const LANGS = [
+  ["en-US", "English"], ["es-ES", "Spanish"], ["fr-FR", "French"], ["de-DE", "German"],
+  ["it-IT", "Italian"], ["pt-BR", "Portuguese"], ["nl-NL", "Dutch"], ["ru-RU", "Russian"],
+  ["uk-UA", "Ukrainian"], ["pl-PL", "Polish"], ["tr-TR", "Turkish"], ["ar-SA", "Arabic"],
+  ["hi-IN", "Hindi"], ["ur-PK", "Urdu"], ["bn-BD", "Bengali"], ["zh-CN", "Chinese (Mandarin)"],
+  ["ja-JP", "Japanese"], ["ko-KR", "Korean"], ["vi-VN", "Vietnamese"], ["id-ID", "Indonesian"],
+  ["sw-KE", "Swahili"],
+];
+// Auto mode listens with the Hindi (India) recognizer, which also picks up English words,
+// and leaves working out the actual language(s) to the model.
+const AUTO = { code: "auto", name: "Auto-detect (Hindi, English or a mix)", recognizer: "hi-IN" };
+const $ = (id) => document.getElementById(id);
+const nameOf = (code) => (code === AUTO.code ? AUTO.name : LANGS.find(([c]) => c === code)[1]);
+const recognizerLang = (code) => (code === AUTO.code ? AUTO.recognizer : code);
+
+$("source").add(new Option(AUTO.name, AUTO.code));
+for (const sel of [$("source"), $("target")]) {
+  for (const [code, name] of LANGS) sel.add(new Option(name, code));
+}
+const saved = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
+const save = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+$("source").value = saved("source", AUTO.code);
+$("target").value = saved("target", "en-US");
+
+// Recent finished turns, sent along so the model keeps names and context consistent.
+const history = [];
+const MAX_HISTORY = 6;
+
+function setStatus(text, live = false) {
+  $("status").textContent = text;
+  $("status").classList.toggle("live", live);
+}
+
+function addRow(text, interim = false) {
+  const row = document.createElement("div");
+  row.className = "row" + (interim ? " interim" : "");
+  row.innerHTML = '<div class="src"></div><div><span class="tag"></span><div class="dst"></div></div>';
+  row.querySelector(".src").textContent = text;
+  $("log").append(row);
+  row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  return row;
+}
+
+// The model replies "<lang>Hindi + English</lang>translation"; split that as it streams in.
+function parseReply(raw) {
+  const open = "<lang>", close = "</lang>";
+  if (raw.startsWith(open)) {
+    const end = raw.indexOf(close);
+    if (end === -1) return { lang: "", text: "" };  // tag still arriving
+    return { lang: raw.slice(open.length, end).trim(), text: raw.slice(end + close.length).trimStart() };
+  }
+  if (open.startsWith(raw)) return { lang: "", text: "" };  // first few characters of the tag
+  return { lang: "", text: raw };  // error message, or the model skipped the tag
+}
+
+async function translate(text, row) {
+  const dst = row.querySelector(".dst");
+  const tag = row.querySelector(".tag");
+  const res = await fetch("/api/translate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      text,
+      source_lang: nameOf($("source").value),
+      target_lang: nameOf($("target").value),
+      history: history.slice(-MAX_HISTORY),
+    }),
+  });
+  if (!res.ok) { dst.textContent = `[error: server returned ${res.status}]`; return; }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let raw = "";
+  let reply = { lang: "", text: "" };
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    raw += decoder.decode(value, { stream: true });
+    reply = parseReply(raw);
+    tag.textContent = reply.lang;
+    dst.textContent = reply.text;
+  }
+  if (!reply.text.startsWith("[error")) history.push({ source: text, translation: reply.text });
+}
+
+// --- Speech recognition (Chrome, Edge, Safari) ---
+const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognizer = null;
+let listening = false;
+let interimRow = null;
+
+function startListening() {
+  recognizer = new Recognition();
+  recognizer.lang = recognizerLang($("source").value);
+  recognizer.continuous = true;
+  recognizer.interimResults = true;
+
+  recognizer.onresult = (event) => {
+    let interim = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const result = event.results[i];
+      const text = result[0].transcript.trim();
+      if (!text) continue;
+      if (result.isFinal) {
+        if (interimRow) { interimRow.remove(); interimRow = null; }
+        translate(text, addRow(text));
+      } else {
+        interim += text + " ";
+      }
+    }
+    if (interim) {
+      if (!interimRow) interimRow = addRow("", true);
+      interimRow.querySelector(".src").textContent = interim.trim();
+    }
+  };
+  recognizer.onerror = (event) => {
+    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      stopListening();
+      setStatus("Microphone access was blocked. Allow it in the browser and try again.");
+    } else if (event.error !== "no-speech" && event.error !== "aborted") {
+      setStatus(`Speech recognition error: ${event.error}`, listening);
+    }
+  };
+  // The browser ends recognition after silence; restart while the user still wants to listen.
+  recognizer.onend = () => { if (listening) recognizer.start(); };
+
+  recognizer.start();
+  listening = true;
+  $("toggle").textContent = "Stop";
+  $("toggle").classList.add("live");
+  setStatus(`Listening in ${nameOf($("source").value)}…`, true);
+}
+
+function stopListening() {
+  listening = false;
+  if (recognizer) recognizer.stop();
+  if (interimRow) { interimRow.remove(); interimRow = null; }
+  $("toggle").textContent = "Start listening";
+  $("toggle").classList.remove("live");
+  setStatus("Stopped.");
+}
+
+if (!Recognition) {
+  $("toggle").disabled = true;
+  setStatus("This browser has no speech recognition. Use Chrome, Edge or Safari, or type below.");
+}
+
+$("toggle").onclick = () => (listening ? stopListening() : startListening());
+$("clear").onclick = () => { $("log").replaceChildren(); history.length = 0; };
+for (const id of ["source", "target"]) {
+  $(id).onchange = () => {
+    save(id, $(id).value);
+    if (id === "source" && listening) { stopListening(); startListening(); }
+  };
+}
+$("typed").onsubmit = (e) => {
+  e.preventDefault();
+  const text = $("typedText").value.trim();
+  if (!text) return;
+  $("typedText").value = "";
+  translate(text, addRow(text));
+};
+</script>
+</body>
+</html>
