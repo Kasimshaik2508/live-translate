@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Live Translate</title>
+<meta name="description" content="Live classroom translation: speech in any language, mixed or not, translated as people talk.">
+<meta name="theme-color" content="#2457d6">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Translate">
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66;
+    --line: #e4e4df; --accent: #2457d6; --accent-text: #ffffff; --live: #d62f2f;
+    --level: #2f9e5b; --error: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151514; --panel: #1f1f1d; --text: #ececea; --muted: #9a9a94;
+      --line: #33332f; --accent: #6d93ff; --accent-text: #0d0d0c; --live: #ff6b6b;
+      --level: #4cc27f; --error: #ff8a80;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main {
+    max-width: 860px; margin: 0 auto;
+    padding: max(20px, env(safe-area-inset-top)) 16px max(48px, env(safe-area-inset-bottom));
+  }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  header img { width: 32px; height: 32px; border-radius: 8px; }
+  h1 { font-size: 1.3rem; margin: 0; flex: 1; }
+  h2 { font-size: 1.1rem; margin: 0 0 8px; }
+  a { color: var(--accent); }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--muted); }
+  select, input[type=text], input[type=password] {
+    font: inherit; color: var(--text); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0;
+  }
+  button {
+    font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 9px 18px;
+    background: var(--accent); color: var(--accent-text); cursor: pointer;
+  }
+  button:disabled { opacity: .6; cursor: default; }
+  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button.live { background: var(--live); }
+  button.small { padding: 6px 12px; font-size: .9rem; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px;
+  }
+  .card p { margin: 0 0 12px; }
+  .card ol { margin: 0 0 14px; padding-left: 22px; }
+  .keyrow { display: flex; gap: 8px; flex-wrap: wrap; }
+  .keyrow input { flex: 1 1 220px; }
+  .note { font-size: .85rem; color: var(--muted); }
+  .error { color: var(--error); font-size: .9rem; min-height: 1.4em; margin-top: 8px; }
+  .statusbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; min-height: 1.5em; }
+  #status { font-size: .9rem; color: var(--muted); }
+  #status.live::before { content: "● "; color: var(--live); }
+  #status.bad { color: var(--error); }
+  .meter { width: 80px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; flex: none; }
+  .meter[hidden] { display: none; }
+  .meter > div { height: 100%; width: 0; background: var(--level); transition: width .08s linear; }
+  #log { display: flex; flex-direction: column; gap: 10px; }
+  .row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+  }
+  .row .src { color: var(--muted); }
+  .row .dst { font-weight: 500; }
+  .row.interim .src { font-style: italic; }
+  .row.interim .dst:empty::after { content: ""; }
+  .row .dst:empty::after { content: "…"; color: var(--muted); }
+  .tag {
+    display: inline-block; margin-bottom: 4px; padding: 0 8px; border-radius: 999px;
+    font-size: .75rem; color: var(--muted); border: 1px solid var(--line);
+  }
+  .tag:empty { display: none; }
+  form.typed { display: flex; gap: 8px; margin-top: 20px; }
+  form.typed input { flex: 1; }
+  #installHint { margin-top: 24px; }
+  #modeHint { margin: -6px 0 12px; }
+  [hidden] { display: none !important; }
+  @media (max-width: 600px) {
+    .row { grid-template-columns: 1fr; gap: 4px; }
+    .controls > label { flex: 1 1 140px; }
+    .controls select { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="icons/icon-192.png" alt="">
+    <h1>Live Translate</h1>
+    <button id="settingsBtn" class="secondary small" hidden>Settings</button>
+  </header>
+
+  <!-- Shown until a key is saved, and from the Settings button. -->
+  <section id="setup" class="card" hidden>
+    <h2 id="setupTitle">Add your free Gemini API key</h2>
+    <p>Live Translate uses Google Gemini to listen and translate. Each person uses their own
+      free key, so nobody shares limits.</p>
+    <ol>
+      <li>Open <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>
+        and sign in with your Google account.</li>
+      <li>Click <b>Create API key</b> and copy it.</li>
+      <li>Paste it below.</li>
+    </ol>
+    <form id="keyForm" class="keyrow">
+      <input id="keyInput" type="password" placeholder="Paste your API key" autocomplete="off"
+        autocapitalize="off" spellcheck="false" aria-label="Gemini API key">
+      <button id="keySave" type="submit">Save key</button>
+    </form>
+    <div id="keyError" class="error" role="alert"></div>
+    <p class="note">Your key is saved only in this browser on this device and is sent only to
+      Google. Don't share it with anyone.</p>
+    <div id="savedKey" hidden>
+      <p class="note">Saved key: <span id="savedKeyHint"></span></p>
+      <div class="keyrow">
+        <button id="keyDone" type="button" class="secondary">Back</button>
+        <button id="keyRemove" type="button" class="secondary">Remove key from this device</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="app" hidden>
+    <div class="controls">
+      <label>Mode
+        <select id="mode">
+          <option value="continuous">Continuous</option>
+          <option value="sentences">Sentence by sentence</option>
+        </select>
+      </label>
+      <label>Translate to
+        <select id="target"></select>
+      </label>
+      <button id="toggle">Start listening</button>
+      <button id="clear" class="secondary">Clear</button>
+    </div>
+    <p id="modeHint" class="note"></p>
+    <div class="statusbar">
+      <div class="meter" id="meter" hidden title="Microphone level"><div></div></div>
+      <div id="status" role="status"></div>
+    </div>
+    <div id="log"></div>
+    <form class="typed" id="typed">
+      <input type="text" id="typedText" placeholder="Or type something to translate">
+      <button type="submit" class="secondary">Translate</button>
+    </form>
+    <div id="installHint" class="card note" hidden></div>
+  </section>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>
