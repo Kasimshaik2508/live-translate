@@ -13,6 +13,7 @@ const LANGS = [
 ];
 const targetName = () => LANGS.find(([c]) => c === $("target").value)[1];
 const targetCode = () => $("target").value.split("-")[0];
+const sourceName = () => LANGS.find(([c]) => c === $("source").value)?.[1] ?? "";
 
 // --- Small storage helpers (storage can be unavailable, e.g. in private windows) ---
 const memory = {};
@@ -71,6 +72,10 @@ $("settingsBtn").onclick = () => { if (listening) stopListening(); showSetup(); 
 
 // --- Controls ---
 for (const [code, name] of LANGS) $("target").add(new Option(name, code));
+$("source").add(new Option("Detect automatically", ""));
+for (const [code, name] of LANGS) $("source").add(new Option(name, code));
+$("source").value = load("source", "");
+if ($("source").selectedIndex < 0) $("source").value = "";
 $("target").value = load("target", "en-US");
 if (!$("target").value) $("target").value = "en-US";
 $("mode").value = load("mode", "continuous");
@@ -78,9 +83,9 @@ if (!$("mode").value) $("mode").value = "continuous";
 
 const MODE_HINTS = {
   continuous: "Translates while people talk. Best when the class mostly uses one language "
-    + "(mixing in English is fine). If speakers switch between several languages, use Sentence by sentence.",
-  sentences: "Each line appears about a second after the speaker pauses, tagged with the "
-    + "language. Handles speakers switching between languages best.",
+    + "(mixing in English is fine). For the most accurate results, use Sentence by sentence.",
+  sentences: "Most accurate. Each line appears about a second after the speaker pauses, tagged "
+    + "with the language. Setting the spoken language (e.g. Urdu) makes it hear words better.",
 };
 const showModeHint = () => { $("modeHint").textContent = MODE_HINTS[$("mode").value]; };
 showModeHint();
@@ -118,7 +123,7 @@ $("typed").onsubmit = async (e) => {
   const row = addRow(text);
   let raw = "";
   try {
-    for await (const piece of streamTranslation(ai, text, targetName(), typedHistory.slice(-6))) {
+    for await (const piece of streamTranslation(ai, text, targetName(), typedHistory.slice(-6), sourceName())) {
       raw += piece;
       showReply(row, raw);
     }
@@ -221,7 +226,8 @@ async function startListening() {
   keepAwake();
 
   translator = new LiveTranslator(ai, {
-    mode: $("mode").value, targetLang: targetName(), targetCode: targetCode(), on: handlers,
+    mode: $("mode").value, targetLang: targetName(), targetCode: targetCode(),
+    sourceLang: sourceName(), sourceCode: $("source").value, on: handlers,
   });
 
   // The browser resamples the microphone to 16 kHz for us.
@@ -267,7 +273,7 @@ $("clear").onclick = () => {
   sentenceRows.clear(); interimRow = null; typedHistory.length = 0;
   live.lines = []; live.outIndex = 0;
 };
-for (const id of ["target", "mode"]) {
+for (const id of ["source", "target", "mode"]) {
   $(id).onchange = () => {
     store(id, $(id).value);
     showModeHint();

@@ -27,7 +27,8 @@ It's free: each person uses their own free Google Gemini key, saved only on thei
 
 ## Use it
 
-1. Choose a **Mode** and the language to **Translate to** (English by default).
+1. Choose a **Mode**, the **Spoken language** (or leave it on *Detect automatically*) and the
+   language to **Translate to** (English by default).
 2. Tap **Start listening** and allow the microphone.
 3. Keep the screen on; phones stop the microphone when the screen locks.
 
@@ -36,12 +37,14 @@ It's free: each person uses their own free Google Gemini key, saved only on thei
 | Mode | Best for |
 |---|---|
 | **Continuous** | Fastest. Words are translated while people talk. Best when the class mostly uses one language (mixing in English is fine, e.g. Hinglish). |
-| **Sentence by sentence** | Most accurate. Each line appears about a second after the speaker pauses, tagged with the language. Best when different speakers switch between several languages. |
+| **Sentence by sentence** | Most accurate, especially with **Spoken language** set. Each line appears about a second after the speaker pauses, tagged with the language. Best when different speakers switch between several languages. |
 
 ### Tips
 
 - Keep the device close to the speaker. The green bar shows the microphone level; if it
   barely moves when someone talks, move closer.
+- If words are often heard wrong, set **Spoken language** to the language people speak (for
+  example Urdu, which otherwise often gets mixed up with Hindi) and use **Sentence by sentence**.
 - You can also type something into the box at the bottom to translate it.
 - **Settings** lets you change or remove your key.
 

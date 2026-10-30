@@ -1,7 +1,7 @@
 // Makes the app installable and lets it open without a connection. Pages are fetched from
 // the network first, so updates show up right away; the cache is only a fallback.
 // Requests to Google (Gemini) are never cached.
-const CACHE = "live-translate-v1";
+const CACHE = "live-translate-v2";
 const SHELL = [
   "./", "index.html", "app.js", "gemini.js", "audio-worklet.js", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png", "icons/favicon-32.png",

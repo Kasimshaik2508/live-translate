@@ -13,6 +13,7 @@ export const MODELS = {
 // Live sessions are capped at 10 minutes, so switch to a fresh one a little before that.
 const SESSION_MS = 9 * 60 * 1000;
 const MAX_BUFFERED_CHUNKS = 300; // ~30 s of audio kept while (re)connecting
+export const SENTENCE_PAUSE_MS = 900;
 
 export const SYSTEM = `You are a live interpreter in a classroom. You receive one utterance at a time, \
 transcribed from speech, and return its translation into the target language.
@@ -34,15 +35,23 @@ only obvious transcription errors.
 - Speech recognition makes mistakes. When a word is clearly misheard, translate what the \
 speaker most likely said.
 - Keep the speaker's tone and register. Keep names, numbers, technical terms and units.
-- Earlier utterances are given for context only; translate just the new one.`;
+- Earlier utterances are given for context only; translate just the new one.
+- Speech is split at pauses, so an utterance may be only part of a sentence, continuing \
+the previous one or continued by the next. Translate it as that part, using the context to \
+get the meaning right, without inventing the missing words.
+- When the transcript reads oddly, think about which similar-sounding words in the spoken \
+language would make sense here, and translate those.
+- Urdu and Hindi sound almost the same; Urdu speech is often written down in Devanagari. \
+If a spoken language is given, trust it for the label and for word meanings.`;
 
-export function buildPrompt(text, targetLang, history = []) {
+export function buildPrompt(text, targetLang, history = [], sourceLang = "") {
   const lines = [];
   if (history.length) {
     lines.push("<context>");
     for (const turn of history) lines.push(`Speaker: ${turn.source}\nTranslation: ${turn.translation}`);
     lines.push("</context>\n");
   }
+  if (sourceLang) lines.push(`Spoken language (set by the user): ${sourceLang}, possibly mixed with English`);
   lines.push(`Target language: ${targetLang}`);
   lines.push(`<utterance>${text}</utterance>`);
   return lines.join("\n");
@@ -84,10 +93,10 @@ export async function checkKey(ai) {
   await ai.models.get({ model: MODELS.translate });
 }
 
-export async function* streamTranslation(ai, text, targetLang, history = []) {
+export async function* streamTranslation(ai, text, targetLang, history = [], sourceLang = "") {
   const stream = await ai.models.generateContentStream({
     model: MODELS.translate,
-    contents: buildPrompt(text, targetLang, history),
+    contents: buildPrompt(text, targetLang, history, sourceLang),
     config: { systemInstruction: SYSTEM },
   });
   for await (const chunk of stream) {
@@ -109,11 +118,14 @@ function toBase64(buffer) {
  *   both:            listening(), error(message)        error means listening stopped
  */
 export class LiveTranslator {
-  constructor(ai, { mode, targetLang, targetCode, on }) {
+  // sourceLang/sourceCode: the language people speak, or "" to detect it automatically.
+  constructor(ai, { mode, targetLang, targetCode, sourceLang = "", sourceCode = "", on }) {
     this.ai = ai;
     this.continuous = mode === "continuous";
     this.targetLang = targetLang;
     this.targetCode = targetCode;
+    this.sourceLang = sourceLang;
+    this.sourceCode = sourceCode;
     this.on = on;
     this.session = null;
     this.pending = [];
@@ -157,10 +169,13 @@ export class LiveTranslator {
     }
     return {
       responseModalities: ["TEXT"],
-      inputAudioTranscription: { languageCodes: [] }, // empty = detect automatically
+      // Empty = detect automatically. A chosen language (plus English, which people mix in)
+      // makes recognition more accurate, e.g. Urdu that would otherwise be heard as Hindi.
+      inputAudioTranscription: { languageCodes: this.sourceCode ? [...new Set([this.sourceCode, "en-IN"])] : [] },
       realtimeInputConfig: {
-        // End a sentence after half a second of silence so translations start sooner.
-        automaticActivityDetection: { silenceDurationMs: 500 },
+        // End a sentence after a short silence: long enough that people who speak slowly
+        // aren't cut off mid-sentence, short enough that translations still come quickly.
+        automaticActivityDetection: { silenceDurationMs: SENTENCE_PAUSE_MS },
       },
     };
   }
@@ -249,7 +264,7 @@ export class LiveTranslator {
   async translateSentence(id, text) {
     let raw = "";
     try {
-      for await (const piece of streamTranslation(this.ai, text, this.targetLang, this.history.slice(-6))) {
+      for await (const piece of streamTranslation(this.ai, text, this.targetLang, this.history.slice(-6), this.sourceLang)) {
         raw += piece;
         this.on.translation?.(id, raw);
       }
