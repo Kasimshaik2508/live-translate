@@ -81,6 +81,26 @@ if (!$("target").value) $("target").value = "en-US";
 $("mode").value = load("mode", "continuous");
 if (!$("mode").value) $("mode").value = "continuous";
 
+// Audio source: your microphone (a class in the room), or a MEETING (Google Meet / Zoom in a browser tab).
+// For a meeting the browser lets us capture the sound of one tab (getDisplayMedia). That only exists in
+// Chrome, Edge and Brave on a computer, so the option is switched off on phones and other browsers.
+const canShareTabAudio = !!navigator.mediaDevices?.getDisplayMedia && !/Android|iPhone|iPad|Mobi/i.test(navigator.userAgent);
+if (!canShareTabAudio) {
+  const opt = $("audioSource").querySelector('option[value="meeting"]');
+  opt.disabled = true;
+  opt.textContent = "Meeting tab + my mic (computer only)";
+}
+$("audioSource").value = canShareTabAudio ? load("audioSource", "mic") : "mic";
+if (!$("audioSource").value) $("audioSource").value = "mic";
+const showAudioHint = () => {
+  const meeting = $("audioSource").value === "meeting";
+  $("audioHint").hidden = !meeting;
+  $("audioHint").textContent = meeting
+    ? 'Press Start listening, pick the Google Meet or Zoom TAB, and tick "Also share tab audio". Headphones give the cleanest result.'
+    : "";
+};
+showAudioHint();
+
 const MODE_HINTS = {
   continuous: "Translates while people talk. Best when the class mostly uses one language "
     + "(mixing in English is fine). For the most accurate results, use Sentence by sentence.",
@@ -95,13 +115,20 @@ function setStatus(text, kind = "") {
   $("status").className = kind;
 }
 
+// Auto-follow the newest line ONLY if the reader is already near the bottom. Otherwise every new
+// translated fragment would yank the page down while they are scrolling up to re-read something.
+// We measure BEFORE the page grows, because adding text makes the page taller and would make
+// "near the bottom" look false.
+const isNearBottom = () => window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 160;
+
 function addRow(text, interim = false) {
   const row = document.createElement("div");
   row.className = "row" + (interim ? " interim" : "");
   row.innerHTML = '<div class="src"></div><div><span class="tag"></span><div class="dst"></div></div>';
   row.querySelector(".src").textContent = text;
+  const follow = isNearBottom();
   $("log").append(row);
-  row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  if (follow) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
   return row;
 }
 
@@ -135,7 +162,7 @@ $("typed").onsubmit = async (e) => {
 
 // --- Live listening ---
 let listening = false;
-let mic = null, audioCtx = null, translator = null, wakeLock = null, interimRow = null;
+let mic = null, tab = null, audioCtx = null, translator = null, wakeLock = null, interimRow = null;
 const sentenceRows = new Map();
 
 // Continuous mode: heard and translated words arrive as separate streams of fragments.
@@ -173,8 +200,9 @@ function onTranslated(fragment) {
     line = live.lines[live.outIndex];
   }
   live.outAt = now;
+  const follow = isNearBottom();
   appendText(line.querySelector(".dst"), fragment);
-  line.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  if (follow) line.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 const handlers = {
@@ -208,14 +236,38 @@ document.addEventListener("visibilitychange", () => {
 });
 
 async function startListening() {
+  const meeting = $("audioSource").value === "meeting" && canShareTabAudio;
+  if (meeting) {
+    // Ask the browser to share a tab. We only want its SOUND (the other people in the meeting).
+    setStatus("Choose the meeting tab to share…");
+    try {
+      tab = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    } catch {
+      setStatus("Sharing was cancelled. Press Start listening and pick the meeting tab.", "bad");
+      return;
+    }
+    if (!tab.getAudioTracks().length) {
+      tab.getTracks().forEach((t) => t.stop());
+      tab = null;
+      setStatus('No sound was shared. Pick the meeting TAB (not a window or screen) and tick "Also share tab audio".', "bad");
+      return;
+    }
+    tab.getVideoTracks().forEach((t) => { t.enabled = false; }); // the picture is not needed
+    // If the person clicks the browser's own "Stop sharing" button, stop listening as well.
+    tab.getTracks().forEach((t) => t.addEventListener("ended", () => { if (listening) stopListening(); }));
+  }
   setStatus("Waiting for microphone access…");
   try {
+    // In a meeting the mic also hears the speakers, so echo cancellation is switched on there.
     mic = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true },
+      audio: { channelCount: 1, echoCancellation: meeting, noiseSuppression: true, autoGainControl: true },
     });
   } catch {
-    setStatus("Microphone access was blocked. Allow it for this site and try again.", "bad");
-    return;
+    if (!meeting) {
+      setStatus("Microphone access was blocked. Allow it for this site and try again.", "bad");
+      return;
+    }
+    mic = null; // a meeting can still be followed from the tab's sound alone (just not your own voice)
   }
   listening = true;
   setStatus("Connecting to Gemini…");
@@ -234,7 +286,8 @@ async function startListening() {
   audioCtx = new AudioContext({ sampleRate: 16000 });
   await audioCtx.audioWorklet.addModule("audio-worklet.js");
   const worklet = new AudioWorkletNode(audioCtx, "pcm16");
-  audioCtx.createMediaStreamSource(mic).connect(worklet);
+  // Both sources feed the same worklet; connecting two inputs to one node simply adds the sounds together.
+  for (const stream of [mic, tab]) if (stream) audioCtx.createMediaStreamSource(stream).connect(worklet);
   worklet.connect(audioCtx.destination); // outputs silence; keeps the node running
   worklet.port.onmessage = ({ data }) => {
     $("meter").firstElementChild.style.width = `${Math.min(100, data.peak * 140)}%`;
@@ -252,9 +305,10 @@ function stopListening() {
   listening = false;
   translator?.stop();
   mic?.getTracks().forEach((t) => t.stop());
+  tab?.getTracks().forEach((t) => t.stop());
   audioCtx?.close();
   wakeLock?.release().catch(() => {});
-  translator = mic = audioCtx = wakeLock = null;
+  translator = mic = tab = audioCtx = wakeLock = null;
   if (interimRow) { interimRow.remove(); interimRow = null; }
   $("toggle").textContent = "Start listening";
   $("toggle").classList.remove("live");
@@ -273,10 +327,11 @@ $("clear").onclick = () => {
   sentenceRows.clear(); interimRow = null; typedHistory.length = 0;
   live.lines = []; live.outIndex = 0;
 };
-for (const id of ["source", "target", "mode"]) {
+for (const id of ["source", "target", "mode", "audioSource"]) {
   $(id).onchange = () => {
     store(id, $(id).value);
     showModeHint();
+    showAudioHint();
     if (listening) { stopListening(); startListening(); }
   };
 }

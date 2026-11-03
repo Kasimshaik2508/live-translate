@@ -93,6 +93,69 @@
     .controls > label { flex: 1 1 140px; }
     .controls select { width: 100%; }
   }
+
+  /* ===== Refreshed look: new palette, rounder cards, softer shadows, phone + desktop layouts ===== */
+  :root {
+    --bg: #f5f5fb; --panel: #ffffff; --text: #17172b; --muted: #65657f; --line: #e2e2ee;
+    --accent: #4f46e5; --accent-text: #ffffff; --accent-soft: #ecebfd;
+    --live: #e0364b; --level: #1f9d6b; --error: #c0262d;
+    --radius: 16px; --shadow: 0 1px 2px rgba(23,23,43,.05), 0 8px 24px rgba(23,23,43,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101018; --panel: #1a1a26; --text: #ededf7; --muted: #9a9ab2; --line: #2d2d41;
+      --accent: #8b8bff; --accent-text: #0f0f1a; --accent-soft: #26264b;
+      --live: #ff6b7d; --level: #4cd49b; --error: #ff8a95;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+    }
+  }
+  html { -webkit-text-size-adjust: 100%; }
+  body { -webkit-font-smoothing: antialiased; letter-spacing: -.005em; }
+  main { max-width: 980px; padding-left: max(clamp(14px, 4vw, 32px), env(safe-area-inset-left));
+         padding-right: max(clamp(14px, 4vw, 32px), env(safe-area-inset-right)); }
+  header { gap: 12px; margin-bottom: 22px; }
+  header img { width: 40px; height: 40px; border-radius: 11px; box-shadow: var(--shadow); }
+  h1 { font-size: 1.45rem; font-weight: 700; letter-spacing: -.02em; }
+  h2 { font-weight: 650; letter-spacing: -.01em; }
+  .card { border-radius: var(--radius); padding: clamp(16px, 3vw, 24px); box-shadow: var(--shadow); }
+  button { border-radius: 10px; min-height: 42px; padding: 10px 18px;
+           transition: filter .15s, background .15s, transform .05s; }
+  @media (hover: hover) { button:hover:not(:disabled) { filter: brightness(1.08); } }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  @media (hover: hover) { button.secondary:hover:not(:disabled) { background: var(--accent-soft); filter: none; } }
+  button.small { min-height: 36px; padding: 6px 14px; }
+  select, input[type=text], input[type=password] { font-size: 1rem; border-radius: 10px; padding: 10px 12px;
+           transition: border-color .15s, box-shadow .15s; }
+  select:focus, input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .controls { gap: 14px; margin-bottom: 14px; }
+  .row { border-radius: 12px; padding: 14px 16px; }
+  #toggle { min-width: 160px; }
+
+  /* Phone: stacked controls, big tap targets, one-column translation rows */
+  @media (max-width: 600px) {
+    .controls { gap: 10px; }
+    .controls > label { flex: 1 1 45%; }
+    #toggle { flex: 1 1 100%; min-height: 52px; font-size: 1.05rem; }
+    #clear { flex: 1 1 100%; }
+    form.typed { flex-direction: column; }
+    form.typed button { width: 100%; }
+    .keyrow button { flex: 1 1 auto; }
+    header { gap: 8px; }
+    header img { width: 34px; height: 34px; }
+    h1 { font-size: 1.1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  }
+  @media (max-width: 420px) { header img { display: none; } }
+  /* Touch screens (phones, tablets): comfortably large controls */
+  @media (pointer: coarse) {
+    button, select, input[type=text], input[type=password] { min-height: 46px; }
+    button.small { min-height: 42px; }
+  }
+  /* Large screens: translated rows get a little more room */
+  @media (min-width: 900px) {
+    .row { gap: 24px; padding: 16px 20px; }
+    .row .dst { font-size: 1.05rem; }
+  }
 </style>
 </head>
 <body>
@@ -145,10 +208,17 @@
       <label>Translate to
         <select id="target"></select>
       </label>
+      <label>Audio source
+        <select id="audioSource">
+          <option value="mic">Microphone (class)</option>
+          <option value="meeting">Meeting tab + my mic</option>
+        </select>
+      </label>
       <button id="toggle">Start listening</button>
       <button id="clear" class="secondary">Clear</button>
     </div>
     <p id="modeHint" class="note"></p>
+    <p id="audioHint" class="note" hidden></p>
     <div class="statusbar">
       <div class="meter" id="meter" hidden title="Microphone level"><div></div></div>
       <div id="status" role="status"></div>
@@ -161,7 +231,7 @@
     <div id="installHint" class="card note" hidden></div>
   </section>
 </main>
-<script type="module" src="app.js"></script>
-<script type="module" src="notes.js"></script>
+<script type="module" src="app.js?v=8"></script>
+<script type="module" src="notes.js?v=12"></script>
 </body>
 </html>
