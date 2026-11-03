@@ -87,20 +87,62 @@ export function transcriptText(chunks) {
   return chunks.map((c) => `[${fmtTime(c.ts)}] ${c.text}`).join("\n");
 }
 
+// ---------- database helpers (used by the online/Supabase storage) ----------
+
+// The page uses camelCase names (sessionId); the database uses snake_case (session_id).
+// COLS lists only the names that differ; toRow / fromRow translate in each direction.
+export const COLS = {
+  sessions: { startedAt: "started_at", endedAt: "ended_at" },
+  chunks: { sessionId: "session_id" },
+  notes: { sessionId: "session_id", fromTs: "from_ts", toTs: "to_ts", toChunkId: "to_chunk_id" },
+};
+
+export const toRow = (kind, obj) =>
+  Object.fromEntries(Object.entries(obj).map(([k, v]) => [COLS[kind][k] ?? k, v]));
+
+// Also drops user_id: the page never needs it (the database fills it in and filters by it).
+export function fromRow(kind, row) {
+  const back = Object.fromEntries(Object.entries(COLS[kind]).map(([js, db]) => [db, js]));
+  const out = {};
+  for (const [k, v] of Object.entries(row)) if (k !== "user_id") out[back[k] ?? k] = v;
+  return out;
+}
+
+// The database returns at most 1000 rows per request, and a long class has more lines than that.
+// So we ask page by page (1000 at a time) until a page comes back short.
+// buildQuery(from, to) must return a promise of { data, error }.
+export async function pageAll(buildQuery, size = 1000) {
+  const rows = [];
+  for (let from = 0; ; from += size) {
+    const { data, error } = await buildQuery(from, from + size - 1);
+    if (error) throw error;
+    rows.push(...data);
+    if (data.length < size) return rows;
+  }
+}
+
 // ---------- the prompts (this is the "brain" of the agent) ----------
 
 // 1) Live notes. We pass the tail of the previous notes so Gemini continues under the same
 //    headings instead of starting over every 2 minutes.
-export function notesPrompt(newTranscript, previousNotesTail = "") {
-  return `You are a careful note-taker sitting in a live class.
-Below is the newest part of the class transcript (speech converted to text and translated, one line per phrase, prefixed with the time). It may have recognition or translation mistakes.
+// `kind` is "class" (default) or "meeting": a meeting gets decisions and action items instead of
+// definitions and homework. Everything else (continuity, "only what was said") is identical.
+export function notesPrompt(newTranscript, previousNotesTail = "", kind = "class") {
+  const meeting = kind === "meeting";
+  const setting = meeting ? "meeting" : "class";
+  const speaker = meeting ? "the people in the meeting" : "the teacher";
+  const focus = meeting
+    ? `- Include key points, numbers, dates and names that were mentioned. Add a "### Decisions" list and a "### Action items" list (who and by when, only if they were said) ONLY if decisions or tasks were actually stated.`
+    : `- Include definitions, formulas, examples and any homework / deadlines / exam hints the teacher mentions (put those under "### To do" only if actually mentioned).`;
+  return `You are a careful note-taker sitting in a live ${setting}.
+Below is the newest part of the ${setting} transcript (speech converted to text and translated, one line per phrase, prefixed with the time). It may have recognition or translation mistakes.
 
-Write concise study notes in English, in Markdown.
+Write concise ${meeting ? "meeting" : "study"} notes in English, in Markdown.
 
 Rules:
 - Group by topic using "##" headings, then short bullet points. Bold the key terms.
-- Include definitions, formulas, examples and any homework / deadlines / exam hints the teacher mentions (put those under "### To do" only if actually mentioned).
-- Write ONLY what the teacher actually said. Do not add outside knowledge and do not invent anything.
+${focus}
+- Write ONLY what ${speaker} actually said. Do not add outside knowledge and do not invent anything.
 - Skip small talk and repeated filler.
 - If the topic continues from the previous notes, continue under the same heading name instead of repeating the whole heading.
 - Output only the notes, nothing else.
@@ -112,7 +154,7 @@ ${newTranscript}`;
 // 2) Questions. Two labelled sections so the student always knows what the TEACHER said
 //    versus what the AI is adding from general knowledge.
 export function askPrompt(classContext, question) {
-  return `You are a study assistant for a student. Below are the notes taken in their class(es). The student was sometimes distracted and missed parts, so the notes may be incomplete.
+  return `You are a study assistant for a student. Below are the notes taken in their class(es) or meeting(s). The student was sometimes distracted and missed parts, so the notes may be incomplete.
 
 Answer the student's question using this exact structure:
 
