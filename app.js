@@ -102,8 +102,9 @@ const showAudioHint = () => {
 showAudioHint();
 
 const MODE_HINTS = {
-  continuous: "Translates while people talk. Best when the class mostly uses one language "
-    + "(mixing in English is fine). For the most accurate results, use Sentence by sentence.",
+  continuous: "Translates while people talk. This mode always guesses the spoken language by itself, "
+    + "so heavy accents, similar languages (Hindi/Urdu) or quick switching can be misheard. "
+    + "If the language is known, choose it under Spoken language: the app then switches to Sentence by sentence.",
   sentences: "Most accurate. Each line appears about a second after the speaker pauses, tagged "
     + "with the language. Setting the spoken language (e.g. Urdu) makes it hear words better.",
 };
@@ -329,6 +330,12 @@ $("clear").onclick = () => {
 };
 for (const id of ["source", "target", "mode", "audioSource"]) {
   $(id).onchange = () => {
+    // Continuous mode cannot take a language hint (Google's interpreter model detects it alone), but
+    // Sentence mode can. So choosing a language there switches modes, otherwise the choice would do nothing.
+    if (id === "source" && $("source").value && $("mode").value === "continuous") {
+      $("mode").value = "sentences"; store("mode", "sentences");
+      setStatus("Switched to Sentence by sentence so your chosen spoken language is used for better accuracy.");
+    }
     store(id, $(id).value);
     showModeHint();
     showAudioHint();
