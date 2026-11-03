@@ -75,6 +75,33 @@ const dbAll = (store) => run(store, "readonly", (s) => asPromise(s.getAll()));
 const dbBySession = (store, id) => run(store, "readonly", (s) => asPromise(s.index("bySession").getAll(id)));
 const byId = (a, b) => a.id - b.id;
 
+// Delete one class AND everything that belongs to it (its transcript lines and notes) in a
+// single transaction: either all of it is removed or none of it, so we never leave orphans.
+async function dbDeleteSession(id) {
+  const db = await dbPromise;
+  const tx = db.transaction(["sessions", "chunks", "notes"], "readwrite");
+  for (const name of ["chunks", "notes"]) {
+    const store = tx.objectStore(name);
+    const keys = await asPromise(store.index("bySession").getAllKeys(id));
+    for (const key of keys) store.delete(key);
+  }
+  tx.objectStore("sessions").delete(id);
+  await new Promise((resolve, reject) => {
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
+// Shows how much of the browser's storage allowance this site uses (navigator.storage.estimate).
+async function showUsage() {
+  try {
+    const { usage, quota } = await navigator.storage.estimate();
+    const mb = (n) => (n / 1048576).toFixed(n < 10485760 ? 2 : 0);
+    $("cnUsage").textContent = `Storage used on this device: ${mb(usage)} MB of about ${mb(quota)} MB available.`;
+  } catch { $("cnUsage").textContent = ""; }
+}
+
 // ---------- Gemini ----------
 let client = null, clientKey = "";
 function getClient() {
@@ -136,7 +163,10 @@ panel.innerHTML = `
   <div class="keyrow" style="margin-top:8px">
     <button id="cnUpdate" class="secondary small">Update notes now</button>
     <button id="cnExport" class="secondary small">Download .md</button>
+    <button id="cnRename" class="secondary small">Rename class</button>
+    <button id="cnDelete" class="secondary small">Delete class</button>
   </div>
+  <p id="cnUsage" class="note"></p>
 
   <h3>Ask a question</h3>
   <form id="cnAskForm" class="keyrow">
@@ -325,6 +355,7 @@ async function refresh(selectId) {
   );
   pick.value = [...pick.options].some((o) => o.value === chosen) ? chosen : "new";
   $("cnTitle").hidden = pick.value !== "new";
+  showUsage();
   await showNotes();
 }
 
@@ -354,6 +385,31 @@ $("cnExport").onclick = async () => {
   link.download = `${session.title.replace(/[^\w\- ]+/g, "").trim() || "class-notes"}.md`;
   link.click();
   URL.revokeObjectURL(link.href);
+};
+
+// ---------- rename / delete a class ----------
+$("cnRename").onclick = async () => {
+  const session = sessions.find((s) => s.id === Number($("cnSession").value));
+  if (!session) return;
+  const title = prompt("New name for this class:", session.title)?.trim();
+  if (!title || title === session.title) return;
+  session.title = title;
+  if (current?.id === session.id) current.title = title; // keep the live recording in sync
+  await dbPut("sessions", session);
+  await refresh(session.id);
+};
+
+$("cnDelete").onclick = async () => {
+  const id = Number($("cnSession").value);
+  const session = sessions.find((s) => s.id === id);
+  if (!session) return;
+  if (current?.id === id) { setStatus("End the class before deleting it.", true); return; }
+  if (!confirm(`Delete "${session.title}"? Its notes and saved transcript will be removed. This cannot be undone.`)) return;
+  try {
+    await dbDeleteSession(id);
+    setStatus(`Deleted "${session.title}".`);
+    await refresh(sessions.find((s) => s.id !== id)?.id);
+  } catch (err) { setStatus(friendly(err), true); }
 };
 
 // ---------- 4. ask questions ----------
