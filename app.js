@@ -78,8 +78,8 @@ $("source").value = load("source", "");
 if ($("source").selectedIndex < 0) $("source").value = "";
 $("target").value = load("target", "en-US");
 if (!$("target").value) $("target").value = "en-US";
-$("mode").value = load("mode", "continuous");
-if (!$("mode").value) $("mode").value = "continuous";
+$("mode").value = load("mode", "sentences");
+if (!$("mode").value) $("mode").value = "sentences";
 
 // Audio source: your microphone (a class in the room), or a MEETING (Google Meet / Zoom in a browser tab).
 // For a meeting the browser lets us capture the sound of one tab (getDisplayMedia). That only exists in
