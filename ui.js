@@ -3,7 +3,7 @@
 // mirrors them, so app.js does not need to know about the new look.
 const mode = document.getElementById("mode");
 const seg = document.getElementById("modeSeg");
-const toggle = document.getElementById("toggle");
+const bigButton = document.getElementById("sessionBtn");
 
 // Mode switch: one button per <option>; clicking one changes the hidden select like a user would.
 const buttons = [...mode.options].map((opt) => {
@@ -32,8 +32,9 @@ Object.defineProperty(mode, "value", {
 });
 sync();
 
-// Mic glow: app.js sets the meter bar's width to the input level; turn that into a CSS variable.
+// Mic glow on the big session button: app.js sets the meter bar's width to the input level; turn
+// that into a CSS variable.
 const bar = document.querySelector("#meter > div");
 new MutationObserver(() => {
-  toggle.style.setProperty("--lvl", String(Math.min(1, (parseFloat(bar.style.width) || 0) / 100)));
+  bigButton.style.setProperty("--lvl", String(Math.min(1, (parseFloat(bar.style.width) || 0) / 100)));
 }).observe(bar, { attributes: true, attributeFilter: ["style"] });

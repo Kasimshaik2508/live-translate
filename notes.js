@@ -290,7 +290,7 @@ panel.innerHTML = `
     </div>
 
     <div class="cn-pane" data-pane="record">
-      <p class="note" id="cnIntro" style="margin-top:0">Just want translation? Ignore this box: nothing is saved until you press <b>Start recording notes</b>. For a Google Meet or Zoom call, choose type <b>Meeting</b>.</p>
+      <p class="note" id="cnIntro" style="margin-top:0">Name the class here (optional). Notes record when <b>Class notes</b> is switched on above and the session is started; you can switch them on or off at any time without stopping translation. For a Google Meet or Zoom call, choose type <b>Meeting</b>.</p>
       <label>Start as <select id="cnPick"></select></label>
       <div id="cnKindRow" style="margin-top:10px">
         <label>Type <select id="cnKind">
@@ -436,7 +436,7 @@ async function makeNotes(session, { manual = false } = {}) {
       if (manual) {
         setStatus(notes.length
           ? "All saved lines are already in the notes. Say or type something new."
-          : "No lines saved in this class yet. Press Start recording notes FIRST, then speak or type; lines typed before Start class are ignored.", true);
+          : "No lines saved in this class yet. Switch on Class notes FIRST, then speak or type; lines from before notes started are not saved.", true);
       }
       return;
     }
@@ -492,7 +492,7 @@ $("cnStart").onclick = async () => {
   }
   $("cnStart").hidden = true; $("cnEnd").hidden = false; $("cnTitle").disabled = true; $("cnPick").disabled = true;
   setStatus(pick === "new"
-    ? `Started a NEW class "${current.title}". Now press Start listening above${current.kind === "meeting" ? " and pick the Meet/Zoom tab, ticking Also share tab audio" : ""}. Lines are saved automatically.`
+    ? `Recording notes for "${current.title}". Lines are saved automatically${current.kind === "meeting" ? "; when asked, pick the Meet/Zoom tab and tick Also share tab audio" : ""}.`
     : `CONTINUING "${current.title}" (first started at ${fmtTime(current.startedAt)}). New lines and notes are added to it.`);
   await refresh(current.id);
 };
@@ -539,6 +539,7 @@ $("cnEnd").onclick = async () => {
     session.endedAt = Date.now();
     await dbPut("sessions", session);
     current = null;
+    setStatus(`Ended "${session.title}". Everything is saved.`);
     await makeNotes(session);                 // final notes for the last few minutes
   } catch (err) {
     setStatus(friendly(err), true);
@@ -630,7 +631,7 @@ async function notesFor(id) {
 
 async function showNotes() {
   const id = Number($("cnSession").value);
-  if (!id) { show($("cnNotes"), plain("No classes yet. Press Start recording notes.")); return; }
+  if (!id) { show($("cnNotes"), plain("No classes yet. Switch on Class notes and press Start class session.")); return; }
   const notes = await notesFor(id);
   show($("cnNotes"), notes.length
     ? renderMarkdown(notes.map((n) => n.markdown).join("\n\n"))
@@ -963,7 +964,7 @@ async function offerImport() {
 
 // ---------- on page load ----------
 async function startApp() {
-  setStatus(`Press Start recording notes, then Start listening above. Notes are saved ${store === cloud ? "to your online account" : "on this device"}.`);
+  setStatus(`Switch on Class notes and press Start class session above. Notes are saved ${store === cloud ? "to your online account" : "on this device"}.`);
   try {
     await refresh();
     offerImport();
@@ -991,7 +992,7 @@ async function resumeClass(session) {
   document.querySelectorAll("#log .row").forEach((r) => { r.dataset.cnSaved = "1"; }); // old rows are not new speech
   $("cnStart").hidden = true; $("cnEnd").hidden = false; $("cnTitle").disabled = true; $("cnPick").disabled = true;
   $("cnTitle").hidden = true;
-  setStatus(`"${session.title}" is still open (you did not press End class). Press Start listening above to keep adding to it, or End class when it is over.`);
+  setStatus(`"${session.title}" is still open (it was not ended). Press Resume listening above to keep adding to it, or End class session when it is over.`);
   await refresh(session.id);
 }
 

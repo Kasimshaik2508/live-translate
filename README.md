@@ -27,24 +27,37 @@ It's free: each person uses their own free Google Gemini key, saved only on thei
 
 ## Use it
 
-1. Choose a **Mode**, the **Spoken language** (or leave it on *Detect automatically*) and the
-   language to **Translate to** (English by default).
-2. Tap **Start listening** and allow the microphone.
+1. Choose the **Spoken language** (or leave it on *Auto-detect*), the language to
+   **Translate to** (English by default), and **Fast** or **Accurate**.
+2. Switch **Live translation** and **Class notes** on or off, then tap **Start class session**
+   (it says *Start translating* or *Start recording notes* when only one is on) and allow the
+   microphone.
 3. Keep the screen on; phones stop the microphone when the screen locks.
 
-### Which mode?
+### One class session
+
+- **During the class** you can switch **Class notes** on or off at any time without stopping
+  translation. Switching notes back on adds to the same class.
+- Switching **Live translation** off hides the captions. If notes are on, the app keeps
+  listening, because notes are written from what it hears.
+- **End class session** stops listening, saves the last lines, writes the final notes and
+  marks the class as finished.
+- If the page was closed in the middle of a class, it opens with that class still running:
+  tap **Resume listening** to carry on, or **End class session**.
+
+### Fast or Accurate?
 
 | Mode | Best for |
 |---|---|
-| **Continuous** | Fastest. Words are translated while people talk. Best when the class mostly uses one language (mixing in English is fine, e.g. Hinglish). |
-| **Sentence by sentence** | Most accurate, especially with **Spoken language** set. Each line appears about a second after the speaker pauses, tagged with the language. Best when different speakers switch between several languages. |
+| **Fast** (continuous) | Fastest. Words are translated while people talk. Best when the class mostly uses one language (mixing in English is fine, e.g. Hinglish). |
+| **Accurate** (sentence by sentence) | Most accurate, especially with **Spoken language** set. Each line appears about a second after the speaker pauses, tagged with the language. Best when different speakers switch between several languages. |
 
 ### Tips
 
 - Keep the device close to the speaker. The green bar shows the microphone level; if it
   barely moves when someone talks, move closer.
 - If words are often heard wrong, set **Spoken language** to the language people speak (for
-  example Urdu, which otherwise often gets mixed up with Hindi) and use **Sentence by sentence**.
+  example Urdu, which otherwise often gets mixed up with Hindi) and use **Accurate**.
 - You can also type something into the box at the bottom to translate it.
 - **Settings** lets you change or remove your key.
 
@@ -55,8 +68,8 @@ It's free: each person uses their own free Google Gemini key, saved only on thei
 | "key isn't valid" | Copy the key again from AI Studio and paste the whole thing (Settings → paste new key). |
 | "Free-tier limit reached" | Wait a minute. Free keys have per-minute and per-day limits. |
 | "Microphone access was blocked" | Tap the icon left of the address bar, allow the microphone, and reload. On a Mac also check System Settings → Privacy & Security → Microphone. |
-| It stopped listening | The screen probably locked. Tap **Start listening** again. |
-| Wrong language in Continuous mode | Switch to **Sentence by sentence**. |
+| It stopped listening | The screen probably locked. Tap **Resume listening**. |
+| Wrong language in Fast mode | Switch to **Accurate**. |
 
 ### Privacy
 

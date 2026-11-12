@@ -129,24 +129,56 @@
 
   /* ---------- the big button ---------- */
   .dock { display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 4px; }
-  #toggle {
+  #sessionBtn {
     --lvl: 0; min-width: 260px; min-height: 60px; padding: 14px 30px; border-radius: 999px; font-size: 1.08rem;
     background: linear-gradient(135deg, #5b4ff5, #8b5cf6); color: #fff;
     box-shadow: 0 10px 28px var(--glow);
   }
-  #toggle::before {
+  #sessionBtn::before {
     content: ""; width: 20px; height: 20px; flex: none; background: currentColor;
     -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat;
     --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 15a3.5 3.5 0 0 0 3.5-3.5v-6a3.5 3.5 0 1 0-7 0v6A3.5 3.5 0 0 0 12 15Zm6.5-3.5a1 1 0 1 0-2 0 4.5 4.5 0 0 1-9 0 1 1 0 1 0-2 0 6.5 6.5 0 0 0 5.5 6.42V20H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.08a6.5 6.5 0 0 0 5.5-6.42Z'/%3E%3C/svg%3E");
   }
-  #toggle.live {
+  #sessionBtn.live {
     background: var(--live);
     box-shadow: 0 0 0 calc(4px + var(--lvl) * 18px) color-mix(in srgb, var(--live) 22%, transparent), 0 10px 28px color-mix(in srgb, var(--live) 35%, transparent);
     transition: box-shadow .1s linear, background .15s;
   }
-  #toggle.live::before {
+  #sessionBtn.live::before {
     --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='6' y='6' width='12' height='12' rx='2.5'/%3E%3C/svg%3E");
   }
+  #resumeBtn { border-radius: 999px; min-width: 200px; }
+  #sessionMsg { margin: 0; color: var(--text); font-weight: 550; }
+
+  /* what the session runs: two on/off switches */
+  .features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .feat {
+    justify-content: flex-start; gap: 12px; min-height: 64px; padding: 10px 14px; text-align: left;
+    background: var(--soft); color: var(--text); border: 1px solid var(--line); border-radius: 16px; font-weight: 650;
+  }
+  .feat .ic { width: 36px; height: 36px; flex: none; border-radius: 11px; display: grid; place-items: center;
+    background: var(--panel); color: var(--muted); }
+  .feat .ic svg { width: 20px; height: 20px; }
+  .feat .txt { flex: 1; min-width: 0; line-height: 1.25; overflow-wrap: anywhere; }
+  .feat small { display: block; color: var(--muted); font-weight: 500; font-size: .78rem; }
+  .feat .sw { width: 38px; height: 22px; flex: none; border-radius: 999px; background: var(--line); position: relative; transition: background .15s; }
+  .feat .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .15s; }
+  .feat[aria-pressed=true] { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: var(--accent-soft); }
+  .feat[aria-pressed=true] .ic { background: var(--accent); color: var(--accent-text); }
+  .feat[aria-pressed=true] .sw { background: var(--accent); }
+  .feat[aria-pressed=true] .sw::after { transform: translateX(16px); }
+  .feat.recording small { color: var(--live); font-weight: 650; }
+  .feat.recording small::before { content: "● "; }
+  @media (hover: hover) { .feat:hover:not(:disabled) { filter: none; border-color: var(--accent); } }
+
+  /* translation switched off mid-session: captions hidden, notes keep recording */
+  #captionsOff { border: 1.5px dashed var(--line); border-radius: var(--radius); padding: 28px 20px; text-align: center; }
+  body:not(.captions-off) #captionsOff, body.captions-off #log, body.captions-off form.typed { display: none; }
+
+  /* notes start and end from the session controls above, so the panel's own buttons are not shown */
+  #cnStart, #cnEnd { display: none !important; }
+
   .statusline { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 1.4em; max-width: 100%; }
   #status { font-size: .88rem; color: var(--muted); text-align: center; }
   #status.live { color: var(--text); font-weight: 550; }
@@ -168,7 +200,7 @@
     content: ""; width: 54px; height: 54px; border-radius: 50%; margin-bottom: 12px;
     background: var(--accent-soft) center / 24px no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a84ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 5h7M7.5 3v2M5.5 5c0 4 2.5 7 5.5 8M10 5c-.5 3.5-3 6.5-6 8'/%3E%3Cpath d='M12 21l4.5-10L21 21M13.6 17.5h5.8'/%3E%3C/svg%3E");
   }
-  #log:empty::after { content: "Press Start listening and speak.\A Translations appear here as people talk."; white-space: pre-line; color: var(--muted); font-size: .95rem; }
+  #log:empty::after { content: "Press Start class session and speak.\A Translations appear here as people talk."; white-space: pre-line; color: var(--muted); font-size: .95rem; }
   .row {
     display: flex; flex-direction: column; gap: 6px; padding: 16px 20px;
     background: var(--panel); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow);
@@ -207,7 +239,7 @@
 
   /* ---------- phones ---------- */
   @media (max-width: 640px) {
-    :root { --dock-h: 116px; --radius: 18px; }
+    :root { --dock-h: 120px; --radius: 18px; }
     main { padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
     header { margin: 0 -14px 4px; padding-left: 14px; padding-right: 14px; }
     .brand small { display: none; }
@@ -218,6 +250,13 @@
     .arrow { width: 34px; height: 34px; margin-bottom: 6px; }
     .arrow svg { width: 16px; height: 16px; }
     .seg button small { display: none; }
+    .feat { gap: 8px; padding: 10px 10px 10px 12px; min-height: 58px; }
+    .feat .ic { display: none; }
+    .feat .txt { font-size: .92rem; }
+    .feat small { font-size: .74rem; }
+    .feat .sw { width: 32px; height: 20px; }
+    .feat .sw::after { width: 14px; height: 14px; }
+    .feat[aria-pressed=true] .sw::after { transform: translateX(12px); }
     .seg button { min-height: 46px; }
     .audio select { min-height: 46px; }
     .dock {
@@ -228,7 +267,8 @@
       border-top: 1px solid var(--line); box-shadow: 0 -8px 30px rgba(0,0,0,.08);
     }
     .dock .statusline { order: -1; }
-    #toggle { width: 100%; min-width: 0; min-height: 56px; }
+    #sessionBtn, #resumeBtn { width: 100%; min-width: 0; min-height: 56px; }
+    #resumeBtn { min-height: 46px; }
     .row { padding: 14px 16px; }
     .row .dst { font-size: 1.06rem; }
   }
@@ -316,8 +356,24 @@
         <p id="audioHint" class="note" hidden></p>
       </div>
 
+      <div class="features" role="group" aria-label="What this session runs">
+        <button type="button" class="feat" id="featTranslate" aria-pressed="true">
+          <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h7M7.5 3v2M5.5 5c0 4 2.5 7 5.5 8M10 5c-.5 3.5-3 6.5-6 8"/><path d="M12 21l4.5-10L21 21M13.6 17.5h5.8"/></svg></span>
+          <span class="txt">Live translation<small>On</small></span>
+          <span class="sw" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="feat" id="featNotes" aria-pressed="true">
+          <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg></span>
+          <span class="txt">Class notes<small>On</small></span>
+          <span class="sw" aria-hidden="true"></span>
+        </button>
+      </div>
+      <p id="sessionMsg" class="note" role="status" hidden></p>
+
       <div class="dock">
-        <button id="toggle">Start listening</button>
+        <button id="toggle" hidden>Start listening</button>
+        <button id="sessionBtn">Start class session</button>
+        <button id="resumeBtn" class="secondary" hidden>Resume listening</button>
         <div class="statusline">
           <div class="meter" id="meter" hidden title="Microphone level"><div></div></div>
           <div id="status" role="status"></div>
@@ -331,6 +387,8 @@
         <button id="clear" class="secondary small">Clear</button>
       </div>
       <div id="log" aria-live="polite"></div>
+      <div id="captionsOff" class="note">Captions are hidden. Still listening, so your class notes keep recording.
+        Switch <b>Live translation</b> on to see them again.</div>
       <form class="typed" id="typed">
         <input type="text" id="typedText" placeholder="Or type something to translate" aria-label="Text to translate">
         <button type="submit">Translate</button>
@@ -341,7 +399,8 @@
   </section>
 </main>
 <script type="module" src="app.js?v=13"></script>
-<script type="module" src="notes.js?v=14"></script>
-<script type="module" src="ui.js?v=1"></script>
+<script type="module" src="notes.js?v=15"></script>
+<script type="module" src="ui.js?v=2"></script>
+<script type="module" src="session.js?v=1"></script>
 </body>
 </html>

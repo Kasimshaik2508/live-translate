@@ -96,7 +96,7 @@ const showAudioHint = () => {
   const meeting = $("audioSource").value === "meeting";
   $("audioHint").hidden = !meeting;
   $("audioHint").textContent = meeting
-    ? 'Press Start listening, pick the Google Meet or Zoom TAB, and tick "Also share tab audio". Headphones give the cleanest result.'
+    ? 'Press Start, pick the Google Meet or Zoom TAB, and tick "Also share tab audio". Headphones give the cleanest result.'
     : "";
 };
 showAudioHint();
@@ -243,7 +243,7 @@ async function startListening() {
     try {
       tab = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
     } catch {
-      setStatus("Sharing was cancelled. Press Start listening and pick the meeting tab.", "bad");
+      setStatus("Sharing was cancelled. Press Resume listening and pick the meeting tab.", "bad");
       return;
     }
     if (!tab.getAudioTracks().length) {
