@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "https://cdn.jsdelivr.net/npm/@google/genai@2.29.1/+esm";
-import { LiveTranslator, checkKey, describeError, parseReply, streamTranslation } from "./gemini.js";
+import { LiveTranslator, checkKey, describeError, parseReply, streamTranslation } from "./gemini.js?v=2";
 
 const $ = (id) => document.getElementById(id);
 
@@ -102,8 +102,8 @@ const showAudioHint = () => {
 showAudioHint();
 
 const MODE_HINTS = {
-  continuous: "Fast: translates while people talk, and always guesses the spoken language itself. "
-    + "For Hindi/Urdu, strong accents or a known language, use Accurate.",
+  continuous: "Fast: translates while people talk, but can mishear technical English words "
+    + "(e.g. \"photosynthesis\") and similar languages like Hindi/Urdu. For classes, Accurate is best.",
   sentences: "Accurate: each line appears about a second after the speaker pauses. "
     + "Choosing the spoken language (e.g. Urdu) makes it hear words even better.",
 };
@@ -221,6 +221,7 @@ const handlers = {
     const row = sentenceRows.get(id);
     if (row) showReply(row, raw);
   },
+  notice: (message) => setStatus(message, "bad"),
   error: (message) => {
     stopListening();
     setStatus(message, "bad");

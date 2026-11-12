@@ -13,7 +13,15 @@ export const MODELS = {
 // Live sessions are capped at 10 minutes, so switch to a fresh one a little before that.
 const SESSION_MS = 9 * 60 * 1000;
 const MAX_BUFFERED_CHUNKS = 300; // ~30 s of audio kept while (re)connecting
-export const SENTENCE_PAUSE_MS = 900;
+// A sentence ends after this much silence. 0.9 s merged whole paragraphs into one late line, since
+// teachers rarely pause that long; 0.6 s splits at sentence ends without cutting slow speakers off.
+export const SENTENCE_PAUSE_MS = 600;
+// Free keys allow only so many requests a minute. When Google refuses one for that reason, wait and
+// try again instead of losing the line (or stopping listening). After these waits, give up.
+const LIMIT_WAITS_MS = [3000, 8000, 15000];
+const LIMIT_NOTICE = "Free-tier limit reached for a moment. Waiting, then carrying on…";
+const isLimit = (err) => /limit reached/.test(describeError(err));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export const SYSTEM = `You are a live interpreter in a classroom. You receive one utterance at a time, \
 transcribed from speech, and return its translation into the target language.
@@ -94,13 +102,23 @@ export async function checkKey(ai) {
 }
 
 export async function* streamTranslation(ai, text, targetLang, history = [], sourceLang = "") {
-  const stream = await ai.models.generateContentStream({
-    model: MODELS.translate,
-    contents: buildPrompt(text, targetLang, history, sourceLang),
-    config: { systemInstruction: SYSTEM },
-  });
-  for await (const chunk of stream) {
-    if (chunk.text) yield chunk.text;
+  for (let attempt = 0; ; attempt++) {
+    let yielded = false;
+    try {
+      const stream = await ai.models.generateContentStream({
+        model: MODELS.translate,
+        contents: buildPrompt(text, targetLang, history, sourceLang),
+        config: { systemInstruction: SYSTEM },
+      });
+      for await (const chunk of stream) {
+        if (chunk.text) { yielded = true; yield chunk.text; }
+      }
+      return;
+    } catch (err) {
+      // Retry only a refused request; one that already sent part of its answer is not repeated.
+      if (yielded || !isLimit(err) || attempt >= LIMIT_WAITS_MS.length) throw err;
+    }
+    await sleep(LIMIT_WAITS_MS[attempt]);
   }
 }
 
@@ -115,7 +133,8 @@ function toBase64(buffer) {
  * Streams 16 kHz 16-bit mono PCM to Gemini Live and reports text through `on`:
  *   continuous mode: heard(text), translated(text)       fragments to append
  *   sentence mode:   interim(text), final(id, text), translation(id, rawReply)
- *   both:            listening(), error(message)        error means listening stopped
+ *   both:            listening(), notice(message),      a passing problem, still trying
+ *                    error(message)                     error means listening stopped
  */
 export class LiveTranslator {
   // sourceLang/sourceCode: the language people speak, or "" to detect it automatically.
@@ -137,7 +156,15 @@ export class LiveTranslator {
   }
 
   async start() {
-    await this.connect();
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.connect();
+      } catch (err) {
+        if (this.stopped || !isLimit(err) || attempt >= LIMIT_WAITS_MS.length) throw err;
+        this.on.notice?.(LIMIT_NOTICE);
+        await sleep(LIMIT_WAITS_MS[attempt]);
+      }
+    }
   }
 
   sendAudio(buffer) {
@@ -219,7 +246,12 @@ export class LiveTranslator {
     try {
       await this.connect();
     } catch (err) {
-      this.fail(err);
+      if (!this.stopped && isLimit(err) && ++this.failures <= LIMIT_WAITS_MS.length) {
+        this.on.notice?.(LIMIT_NOTICE);
+        this.renewTimer = setTimeout(() => this.renew(), LIMIT_WAITS_MS[this.failures - 1]);
+      } else {
+        this.fail(err);
+      }
     }
     old?.close();
   }
@@ -230,11 +262,13 @@ export class LiveTranslator {
     const reason = event?.reason || "";
     if (event?.code === 1000 && !reason) { this.renew(); return; }
     const message = describeError({ reason, code: event?.code });
-    if (/isn't valid|isn't allowed|limit reached/.test(message) || ++this.failures >= 3) {
+    if (/isn't valid|isn't allowed/.test(message) || ++this.failures > LIMIT_WAITS_MS.length) {
       this.fail({ reason });
       return;
     }
-    setTimeout(() => this.renew(), 1000);
+    const limit = /limit reached/.test(message);
+    if (limit) this.on.notice?.(LIMIT_NOTICE);
+    this.renewTimer = setTimeout(() => this.renew(), limit ? LIMIT_WAITS_MS[this.failures - 1] : 1000);
   }
 
   fail(err) {
