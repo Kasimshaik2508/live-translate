@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "https://cdn.jsdelivr.net/npm/@google/genai@2.29.1/+esm";
-import { LiveTranslator, checkKey, describeError, parseReply, streamTranslation } from "./gemini.js?v=2";
+import { LiveTranslator, checkKey, describeError, parseReply, streamTranslation } from "./gemini.js?v=3";
 
 const $ = (id) => document.getElementById(id);
 
@@ -139,7 +139,9 @@ function showReply(row, raw) {
   // In a meeting, one line tagged with two different non-English languages usually means two
   // sources are playing at once (e.g. a Tamil video and a Hindi video), not one person mixing.
   if (tab && reply.lang) {
-    const spoken = new Set(reply.lang.toLowerCase().split("+").map((l) => l.trim()).filter((l) => l && l !== "english"));
+    // Hindi and Urdu count as one spoken language here.
+    const spoken = new Set(reply.lang.toLowerCase().split("+").map((l) => l.trim().replace(/^(hindi\/urdu|urdu)$/, "hindi"))
+      .filter((l) => l && l !== "english"));
     if (spoken.size >= 2) {
       showMixWarning(`Different languages were heard at the same time (${reply.lang}). If more than one video `
         + "or call is playing, share only the one you want translated.");
@@ -173,7 +175,8 @@ $("typed").onsubmit = async (e) => {
       raw += piece;
       showReply(row, raw);
     }
-    typedHistory.push({ source: text, translation: parseReply(raw).text });
+    const reply = parseReply(raw);
+    typedHistory.push({ source: text, translation: reply.text, lang: reply.lang });
   } catch (err) {
     row.querySelector(".dst").textContent = `[${describeError(err)}]`;
   }

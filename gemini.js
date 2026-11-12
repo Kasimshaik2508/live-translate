@@ -35,7 +35,17 @@ Reply in exactly this format, with nothing before or after:
 <lang>LANGUAGES</lang>TRANSLATION
 
 - LANGUAGES: the language(s) actually spoken, in English, joined with " + " when mixed, \
-e.g. "Hindi", "English", "Hindi + English", "Tamil".
+e.g. "Hindi", "English", "Hindi + English", "Tamil". Judge by the words, not the script: \
+speech recognition often writes a language in another script, e.g. Urdu in Devanagari, or \
+English words in Devanagari or Telugu script ("एग्जाम", "క్వశ్చన్"). English words written \
+that way still count as English, so such an utterance is "Hindi + English", not "Hindi".
+- Hindi and Urdu are one spoken language with different vocabulary, so never label an \
+utterance "Hindi + Urdu". Label it "Urdu" when it uses typically Urdu words of Persian or \
+Arabic origin (shukriya, meherbani, ustad, sabaq, nuqsan, janab, ijazat, khuda hafiz, \
+zindagi, waqt), "Hindi" when it uses typically Hindi words of Sanskrit origin (dhanyavaad, \
+adhyay, pariksha, prakash, kripya, samay), and "Hindi/Urdu" when nothing tells them apart.
+- A short or unclear utterance usually continues the language of the previous utterances \
+in the context: keep that label unless its words clearly belong to another language.
 - TRANSLATION: the whole utterance in natural target-language text, mixed parts included. \
 No quotes, notes, or explanations.
 - If the utterance is entirely in the target language already, repeat it as-is, fixing \
@@ -49,14 +59,15 @@ the previous one or continued by the next. Translate it as that part, using the 
 get the meaning right, without inventing the missing words.
 - When the transcript reads oddly, think about which similar-sounding words in the spoken \
 language would make sense here, and translate those.
-- Urdu and Hindi sound almost the same; Urdu speech is often written down in Devanagari. \
-If a spoken language is given, trust it for the label and for word meanings.`;
+- If a spoken language is given, trust it for the label and for word meanings.`;
 
 export function buildPrompt(text, targetLang, history = [], sourceLang = "") {
   const lines = [];
   if (history.length) {
     lines.push("<context>");
-    for (const turn of history) lines.push(`Speaker: ${turn.source}\nTranslation: ${turn.translation}`);
+    for (const turn of history) {
+      lines.push(`Speaker${turn.lang ? ` (${turn.lang})` : ""}: ${turn.source}\nTranslation: ${turn.translation}`);
+    }
     lines.push("</context>\n");
   }
   if (sourceLang) lines.push(`Spoken language (set by the user): ${sourceLang}, possibly mixed with English`);
@@ -302,7 +313,8 @@ export class LiveTranslator {
         raw += piece;
         this.on.translation?.(id, raw);
       }
-      this.history.push({ source: text, translation: parseReply(raw).text });
+      const reply = parseReply(raw);
+      this.history.push({ source: text, translation: reply.text, lang: reply.lang });
     } catch (err) {
       this.on.translation?.(id, `[${describeError(err)}]`);
     }
