@@ -72,7 +72,7 @@ $("settingsBtn").onclick = () => { if (listening) stopListening(); showSetup(); 
 
 // --- Controls ---
 for (const [code, name] of LANGS) $("target").add(new Option(name, code));
-$("source").add(new Option("Detect automatically", ""));
+$("source").add(new Option("Auto-detect", ""));
 for (const [code, name] of LANGS) $("source").add(new Option(name, code));
 $("source").value = load("source", "");
 if ($("source").selectedIndex < 0) $("source").value = "";
@@ -102,11 +102,10 @@ const showAudioHint = () => {
 showAudioHint();
 
 const MODE_HINTS = {
-  continuous: "Translates while people talk. This mode always guesses the spoken language by itself, "
-    + "so heavy accents, similar languages (Hindi/Urdu) or quick switching can be misheard. "
-    + "If the language is known, choose it under Spoken language: the app then switches to Sentence by sentence.",
-  sentences: "Most accurate. Each line appears about a second after the speaker pauses, tagged "
-    + "with the language. Setting the spoken language (e.g. Urdu) makes it hear words better.",
+  continuous: "Fast: translates while people talk, and always guesses the spoken language itself. "
+    + "For Hindi/Urdu, strong accents or a known language, use Accurate.",
+  sentences: "Accurate: each line appears about a second after the speaker pauses. "
+    + "Choosing the spoken language (e.g. Urdu) makes it hear words even better.",
 };
 const showModeHint = () => { $("modeHint").textContent = MODE_HINTS[$("mode").value]; };
 showModeHint();
@@ -334,7 +333,7 @@ for (const id of ["source", "target", "mode", "audioSource"]) {
     // Sentence mode can. So choosing a language there switches modes, otherwise the choice would do nothing.
     if (id === "source" && $("source").value && $("mode").value === "continuous") {
       $("mode").value = "sentences"; store("mode", "sentences");
-      setStatus("Switched to Sentence by sentence so your chosen spoken language is used for better accuracy.");
+      setStatus("Switched to Accurate so your chosen spoken language is used.");
     }
     store(id, $(id).value);
     showModeHint();

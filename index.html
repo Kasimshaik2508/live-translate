@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Live Translate</title>
 <meta name="description" content="Live classroom translation: speech in any language, mixed or not, translated as people talk.">
-<meta name="theme-color" content="#f5f5fb" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#101018" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f4fb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0d16" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -14,78 +14,80 @@
 <meta name="apple-mobile-web-app-title" content="Translate">
 <style>
   :root {
-    --bg: #f5f5fb; --panel: #ffffff; --panel-2: #fafafe; --text: #17172b; --muted: #65657f;
-    --line: #e4e4ef; --accent: #4f46e5; --accent-text: #ffffff; --accent-soft: #ecebfd;
-    --live: #e0364b; --live-soft: #fdecee; --level: #1f9d6b; --error: #c0262d;
-    --radius: 18px; --shadow: 0 1px 2px rgba(23,23,43,.05), 0 10px 30px rgba(23,23,43,.06);
-    --bar-h: 0px; /* height of the phone's bottom action bar */
+    --bg: #f4f4fb; --glow: rgba(99, 91, 255, .16); --panel: #ffffff; --soft: #f6f6fc; --text: #15152a;
+    --muted: #6a6a85; --line: #e3e3f0; --accent: #5b4ff5; --accent-2: #8b5cf6; --accent-text: #ffffff;
+    --accent-soft: #eeedfe; --seg-on: #ffffff; --live: #e5384f; --level: #1f9d6b; --error: #c0262d;
+    --radius: 22px; --shadow: 0 1px 2px rgba(21,21,42,.04), 0 12px 40px rgba(21,21,42,.07);
+    --dock-h: 0px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #101018; --panel: #1a1a26; --panel-2: #161621; --text: #ededf7; --muted: #9a9ab2;
-      --line: #2d2d41; --accent: #8b8bff; --accent-text: #0f0f1a; --accent-soft: #26264b;
-      --live: #ff6b7d; --live-soft: #3a1d25; --level: #4cd49b; --error: #ff8a95;
-      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.25);
+      --bg: #0d0d16; --glow: rgba(124, 116, 255, .22); --panel: #171724; --soft: #1e1e2e; --text: #eeeef8;
+      --muted: #9b9bb5; --line: #2a2a3e; --accent: #8c84ff; --accent-2: #b48cff; --accent-text: #0d0d16;
+      --accent-soft: #25254a; --seg-on: #2e2e4d; --live: #ff6378; --level: #4cd49b; --error: #ff8a95;
+      --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 40px rgba(0,0,0,.35);
     }
   }
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
   body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    -webkit-font-smoothing: antialiased;
+    margin: 0; min-height: 100dvh; color: var(--text);
+    background: radial-gradient(900px 420px at 50% -120px, var(--glow), transparent 70%) no-repeat, var(--bg);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased;
   }
   [hidden] { display: none !important; }
+  .sr-only { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   a { color: var(--accent); }
   h1, h2 { letter-spacing: -.02em; }
   h2 { font-size: 1.15rem; margin: 0 0 8px; }
 
-  /* ---------- page frame ---------- */
+  /* ---------- frame ---------- */
   main {
-    max-width: 1240px; margin: 0 auto;
-    padding: 0 max(16px, env(safe-area-inset-right)) calc(40px + var(--bar-h) + env(safe-area-inset-bottom))
-      max(16px, env(safe-area-inset-left));
+    max-width: 1180px; margin: 0 auto;
+    padding: 0 max(18px, env(safe-area-inset-right)) calc(48px + var(--dock-h) + env(safe-area-inset-bottom))
+      max(18px, env(safe-area-inset-left));
   }
   header {
-    position: sticky; top: 0; z-index: 40;
-    display: flex; align-items: center; gap: 12px;
-    margin: 0 -16px 18px; padding: max(12px, env(safe-area-inset-top)) 16px 12px;
-    background: color-mix(in srgb, var(--bg) 82%, transparent);
-    backdrop-filter: saturate(1.6) blur(14px); -webkit-backdrop-filter: saturate(1.6) blur(14px);
-    border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+    position: sticky; top: 0; z-index: 40; display: flex; align-items: center; gap: 12px;
+    margin: 0 -18px 8px; padding: max(14px, env(safe-area-inset-top)) 18px 14px;
+    background: color-mix(in srgb, var(--bg) 78%, transparent);
+    backdrop-filter: saturate(1.6) blur(16px); -webkit-backdrop-filter: saturate(1.6) blur(16px);
   }
-  header img { width: 38px; height: 38px; border-radius: 11px; box-shadow: var(--shadow); flex: none; }
+  header img { width: 40px; height: 40px; border-radius: 12px; flex: none; box-shadow: 0 6px 18px var(--glow); }
   .brand { flex: 1; min-width: 0; }
-  h1 { font-size: 1.25rem; margin: 0; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  h1 { font-size: 1.2rem; font-weight: 750; margin: 0; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .brand small { display: block; color: var(--muted); font-size: .8rem; }
 
-  /* ---------- building blocks ---------- */
-  .card {
-    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
-    padding: clamp(16px, 2.6vw, 24px); box-shadow: var(--shadow);
-  }
+  /* ---------- basics ---------- */
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: clamp(18px, 3vw, 28px); box-shadow: var(--shadow); }
   .card p { margin: 0 0 12px; }
   .card ol { margin: 0 0 14px; padding-left: 22px; }
-  .note { font-size: .875rem; color: var(--muted); }
+  .note { font-size: .86rem; color: var(--muted); }
   .error { color: var(--error); font-size: .9rem; min-height: 1.4em; margin-top: 8px; }
-  label { display: flex; flex-direction: column; gap: 6px; font-size: .8rem; font-weight: 600; color: var(--muted); min-width: 0; }
+  label { display: flex; flex-direction: column; gap: 6px; font-size: .78rem; font-weight: 650; color: var(--muted); min-width: 0; }
   select, input[type=text], input[type=password] {
     width: 100%; min-width: 0; font: inherit; font-size: 1rem; font-weight: 400; color: var(--text);
-    background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
+    background-color: var(--soft); border: 1px solid var(--line); border-radius: 14px; padding: 11px 14px;
     transition: border-color .15s, box-shadow .15s;
   }
-  select:focus, input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  select {
+    appearance: none; -webkit-appearance: none; padding-right: 38px; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238a8aa6' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center;
+  }
+  select:focus, input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
   button {
-    font: inherit; font-weight: 600; border: 0; border-radius: 12px; min-height: 42px; padding: 10px 18px;
+    font: inherit; font-weight: 650; border: 0; border-radius: 14px; min-height: 44px; padding: 10px 18px;
     background: var(--accent); color: var(--accent-text); cursor: pointer;
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-    transition: filter .15s, background .15s, transform .05s;
+    transition: filter .15s, background .15s, transform .06s, box-shadow .12s;
   }
   button:disabled { opacity: .55; cursor: default; }
-  button:active:not(:disabled) { transform: translateY(1px); }
-  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:active:not(:disabled) { transform: scale(.98); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
-  button.small { min-height: 36px; padding: 6px 14px; font-size: .9rem; }
+  button.small { min-height: 36px; padding: 6px 14px; font-size: .9rem; border-radius: 12px; }
   @media (hover: hover) {
     button:hover:not(:disabled) { filter: brightness(1.07); }
     button.secondary:hover:not(:disabled) { background: var(--accent-soft); filter: none; }
@@ -95,116 +97,144 @@
 
   /* ---------- key setup ---------- */
   #setup { max-width: 580px; margin: 6vh auto 0; }
-  #setup h2 { font-size: 1.35rem; }
+  #setup h2 { font-size: 1.4rem; }
 
-  /* ---------- controls ---------- */
-  #app { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-  .controls { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
-  .hints { margin-top: 12px; }
-  .hints p { margin: 0 0 4px; }
-  .actions { display: flex; gap: 10px; margin-top: 16px; align-items: center; }
-  #toggle { min-width: 200px; min-height: 48px; font-size: 1.02rem; }
+  /* ---------- control centre ---------- */
+  #app { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+  .hero { display: flex; flex-direction: column; gap: 18px; }
+
+  .langbar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 10px; }
+  .langbar select { font-size: 1.12rem; font-weight: 650; padding: 14px 40px 14px 16px; border-radius: 16px; }
+  .arrow {
+    width: 44px; height: 44px; margin-bottom: 4px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .arrow svg { width: 20px; height: 20px; }
+
+  .opts { display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch; }
+  .seg { display: flex; flex: 2 1 320px; padding: 4px; gap: 4px; background: var(--soft);
+    border: 1px solid var(--line); border-radius: 16px; }
+  .seg button { flex: 1; flex-direction: column; gap: 0; min-height: 52px; padding: 6px 10px; border-radius: 12px;
+    background: transparent; color: var(--muted); line-height: 1.2; }
+  .seg button b { font-size: .95rem; }
+  .seg button small { font-size: .74rem; font-weight: 500; }
+  .seg button[aria-pressed=true] { background: var(--seg-on); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 4px 14px rgba(21,21,42,.08); }
+  .seg button[aria-pressed=true] b { color: var(--accent); }
+  @media (hover: hover) { .seg button:hover:not([aria-pressed=true]) { background: var(--accent-soft); filter: none; } }
+  .audio { flex: 1 1 220px; }
+  .audio select { height: 100%; min-height: 52px; }
+
+  .hints p { margin: 0; }
+  .hints p + p { margin-top: 6px; }
+
+  /* ---------- the big button ---------- */
+  .dock { display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 4px; }
+  #toggle {
+    --lvl: 0; min-width: 260px; min-height: 60px; padding: 14px 30px; border-radius: 999px; font-size: 1.08rem;
+    background: linear-gradient(135deg, #5b4ff5, #8b5cf6); color: #fff;
+    box-shadow: 0 10px 28px var(--glow);
+  }
   #toggle::before {
-    content: ""; width: 10px; height: 10px; border-radius: 50%; background: currentColor; flex: none;
+    content: ""; width: 20px; height: 20px; flex: none; background: currentColor;
+    -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat;
+    --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 15a3.5 3.5 0 0 0 3.5-3.5v-6a3.5 3.5 0 1 0-7 0v6A3.5 3.5 0 0 0 12 15Zm6.5-3.5a1 1 0 1 0-2 0 4.5 4.5 0 0 1-9 0 1 1 0 1 0-2 0 6.5 6.5 0 0 0 5.5 6.42V20H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.08a6.5 6.5 0 0 0 5.5-6.42Z'/%3E%3C/svg%3E");
   }
-  #toggle.live { background: var(--live); }
-  #toggle.live::before { animation: pulse 1.2s ease-in-out infinite; }
-  @keyframes pulse { 50% { opacity: .25; transform: scale(.7); } }
-
-  /* ---------- transcript ---------- */
-  .transcript { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
-  .transcript-head {
-    display: flex; align-items: center; gap: 12px; padding: 14px clamp(16px, 2.6vw, 24px);
-    border-bottom: 1px solid var(--line); background: var(--panel-2);
+  #toggle.live {
+    background: var(--live);
+    box-shadow: 0 0 0 calc(4px + var(--lvl) * 18px) color-mix(in srgb, var(--live) 22%, transparent), 0 10px 28px color-mix(in srgb, var(--live) 35%, transparent);
+    transition: box-shadow .1s linear, background .15s;
   }
-  #status { font-size: .9rem; color: var(--muted); flex: 1; min-width: 0; }
-  #status.live { color: var(--text); }
+  #toggle.live::before {
+    --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='6' y='6' width='12' height='12' rx='2.5'/%3E%3C/svg%3E");
+  }
+  .statusline { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 1.4em; max-width: 100%; }
+  #status { font-size: .88rem; color: var(--muted); text-align: center; }
+  #status.live { color: var(--text); font-weight: 550; }
   #status.live::before { content: "● "; color: var(--live); }
   #status.bad { color: var(--error); }
-  .meter { width: 90px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; flex: none; }
+  .meter { width: 70px; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; flex: none; }
   .meter > div { height: 100%; width: 0; background: var(--level); transition: width .08s linear; }
-  .cols {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding: 10px clamp(16px, 2.6vw, 24px) 0;
-    font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
-  }
-  #log {
-    display: flex; flex-direction: column; padding: 0 clamp(16px, 2.6vw, 24px);
-    min-height: 200px; max-height: min(62vh, 680px); overflow-y: auto; overscroll-behavior: contain;
+
+  /* ---------- captions ---------- */
+  .captions-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 6px 4px 12px; }
+  .captions-head h2 { margin: 0; font-size: 1.05rem; }
+  .captions-head h2 span { color: var(--muted); font-weight: 500; font-size: .85rem; margin-left: 6px; }
+  #log { display: flex; flex-direction: column; gap: 12px; }
+  #log:empty {
+    border: 1.5px dashed var(--line); border-radius: var(--radius); padding: 44px 20px;
+    align-items: center; text-align: center;
   }
   #log:empty::before {
-    content: "Press Start listening and speak. Translations will appear here.";
-    margin: auto; padding: 48px 12px; text-align: center; color: var(--muted); max-width: 30ch;
+    content: ""; width: 54px; height: 54px; border-radius: 50%; margin-bottom: 12px;
+    background: var(--accent-soft) center / 24px no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a84ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 5h7M7.5 3v2M5.5 5c0 4 2.5 7 5.5 8M10 5c-.5 3.5-3 6.5-6 8'/%3E%3Cpath d='M12 21l4.5-10L21 21M13.6 17.5h5.8'/%3E%3C/svg%3E");
   }
+  #log:empty::after { content: "Press Start listening and speak.\A Translations appear here as people talk."; white-space: pre-line; color: var(--muted); font-size: .95rem; }
   .row {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding: 14px 0;
-    border-top: 1px solid var(--line); animation: rise .2s ease-out;
+    display: flex; flex-direction: column; gap: 6px; padding: 16px 20px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow);
+    animation: rise .22s ease-out;
   }
-  .row:first-child { border-top: 0; }
-  @keyframes rise { from { opacity: 0; transform: translateY(4px); } }
-  .row .src { color: var(--muted); overflow-wrap: anywhere; }
-  .row .dst { font-weight: 500; font-size: 1.06rem; overflow-wrap: anywhere; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+  .row > div:last-child { display: flex; flex-direction: column; gap: 6px; }
+  .row .src { order: 0; color: var(--muted); font-size: .92rem; overflow-wrap: anywhere; }
+  .row .src:empty { display: none; }
+  .row .dst { font-size: 1.14rem; font-weight: 550; line-height: 1.45; overflow-wrap: anywhere; }
+  .row:last-child { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+  .row.interim { box-shadow: none; background: var(--soft); }
   .row.interim .src { font-style: italic; }
-  .row.interim .dst:empty::after { content: ""; }
-  .row .dst:empty::after { content: "…"; color: var(--muted); }
-  .tag {
-    display: inline-block; margin-bottom: 4px; padding: 1px 9px; border-radius: 999px;
-    font-size: .72rem; font-weight: 600; color: var(--accent); background: var(--accent-soft);
-  }
+  .row.interim .dst:empty { display: none; }
+  .row .dst:empty::after { content: "Translating…"; color: var(--muted); font-weight: 400; font-size: .95rem; }
+  .tag { align-self: flex-start; padding: 2px 10px; border-radius: 999px; font-size: .72rem; font-weight: 700;
+    letter-spacing: .02em; color: var(--accent); background: var(--accent-soft); }
   .tag:empty { display: none; }
-  form.typed {
-    display: flex; gap: 8px; padding: 12px clamp(16px, 2.6vw, 24px);
-    border-top: 1px solid var(--line); background: var(--panel-2);
-  }
-  form.typed input { flex: 1; width: auto; }
 
-  /* ---------- big screens: transcript on the left, class notes beside it ---------- */
-  @media (min-width: 1040px) {
+  form.typed { display: flex; gap: 8px; margin-top: 14px; padding: 6px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); }
+  form.typed input { flex: 1; width: auto; border: 0; background: transparent; box-shadow: none; }
+  form.typed button { border-radius: 13px; }
+
+  /* ---------- big screens: class notes beside the translator ---------- */
+  @media (min-width: 1060px) {
     main:has(#cn:not([hidden])) {
-      display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(340px, 1fr); column-gap: 22px; align-items: start;
+      display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(340px, 1fr); column-gap: 24px; align-items: start;
     }
     main:has(#cn:not([hidden])) > header, main:has(#cn:not([hidden])) > #setup { grid-column: 1 / -1; }
     main:has(#cn:not([hidden])) #cn {
       grid-column: 2; grid-row: 2; margin-top: 0 !important;
-      position: sticky; top: 84px; max-height: calc(100dvh - 104px); overflow-y: auto;
+      position: sticky; top: 86px; max-height: calc(100dvh - 106px); overflow-y: auto;
     }
-    main:has(#cn:not([hidden])) .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 
-  /* ---------- tablets ---------- */
-  @media (max-width: 860px) {
-    .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  }
-
-  /* ---------- phones: compact controls, Start/Stop pinned to the bottom ---------- */
+  /* ---------- phones ---------- */
   @media (max-width: 640px) {
-    :root { --bar-h: 76px; --radius: 16px; }
-    header { margin-bottom: 14px; }
+    :root { --dock-h: 116px; --radius: 18px; }
+    main { padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
+    header { margin: 0 -14px 4px; padding-left: 14px; padding-right: 14px; }
     .brand small { display: none; }
-    .controls { gap: 10px; }
-    .controls select { font-size: .95rem; padding: 9px 8px; }
-    .hints .note { font-size: .82rem; }
-    .actions {
-      position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; margin: 0;
-      padding: 12px max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom))
-        max(16px, env(safe-area-inset-left));
-      background: color-mix(in srgb, var(--panel) 88%, transparent);
-      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-      border-top: 1px solid var(--line);
+    .card { padding: 16px; }
+    .hero { gap: 14px; }
+    .langbar { gap: 6px; }
+    .langbar select { font-size: .98rem; padding: 12px 24px 12px 10px; background-position: right 8px center; }
+    .arrow { width: 34px; height: 34px; margin-bottom: 6px; }
+    .arrow svg { width: 16px; height: 16px; }
+    .seg button small { display: none; }
+    .seg button { min-height: 46px; }
+    .audio select { min-height: 46px; }
+    .dock {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; gap: 8px;
+      padding: 12px max(16px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+      background: color-mix(in srgb, var(--panel) 86%, transparent);
+      backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+      border-top: 1px solid var(--line); box-shadow: 0 -8px 30px rgba(0,0,0,.08);
     }
-    #toggle { flex: 1; min-width: 0; min-height: 52px; }
-    #clear { min-height: 52px; }
-    .cols { display: none; }
-    #log { max-height: 58vh; }
-    .row { grid-template-columns: 1fr; gap: 4px; }
-    .row .src { font-size: .9rem; }
-    .keyrow button { flex: 1 1 auto; }
-    #setup { margin-top: 8px; }
+    .dock .statusline { order: -1; }
+    #toggle { width: 100%; min-width: 0; min-height: 56px; }
+    .row { padding: 14px 16px; }
+    .row .dst { font-size: 1.06rem; }
   }
-  @media (max-width: 330px) { .controls { grid-template-columns: 1fr; } }
 
-  /* Touch screens: comfortably large tap targets */
   @media (pointer: coarse) {
-    button, select, input[type=text], input[type=password] { min-height: 46px; }
+    button, input[type=text], input[type=password] { min-height: 46px; }
     button.small { min-height: 40px; }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -252,54 +282,66 @@
   </section>
 
   <section id="app" hidden>
-    <div class="card">
-      <div class="controls">
-        <label>Mode
-          <select id="mode">
-            <option value="continuous">Continuous</option>
-            <option value="sentences">Sentence by sentence</option>
-          </select>
-        </label>
+    <div class="card hero">
+      <div class="langbar">
         <label>Spoken language
           <select id="source"></select>
         </label>
+        <span class="arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </span>
         <label>Translate to
           <select id="target"></select>
         </label>
-        <label>Audio source
-          <select id="audioSource">
-            <option value="mic">Microphone (class)</option>
-            <option value="meeting">Meeting tab + my mic</option>
+      </div>
+
+      <div class="opts">
+        <div class="seg" id="modeSeg" role="group" aria-label="Mode"></div>
+        <label class="sr-only">Mode
+          <select id="mode" tabindex="-1">
+            <option value="continuous" data-short="Fast" data-sub="Translates while people talk">Continuous</option>
+            <option value="sentences" data-short="Accurate" data-sub="Sentence by sentence">Sentence by sentence</option>
+          </select>
+        </label>
+        <label class="audio"><span class="sr-only">Audio source</span>
+          <select id="audioSource" aria-label="Audio source">
+            <option value="mic">🎙 Microphone (class)</option>
+            <option value="meeting">💻 Meeting tab + my mic</option>
           </select>
         </label>
       </div>
+
       <div class="hints">
         <p id="modeHint" class="note"></p>
         <p id="audioHint" class="note" hidden></p>
       </div>
-      <div class="actions">
+
+      <div class="dock">
         <button id="toggle">Start listening</button>
-        <button id="clear" class="secondary">Clear</button>
+        <div class="statusline">
+          <div class="meter" id="meter" hidden title="Microphone level"><div></div></div>
+          <div id="status" role="status"></div>
+        </div>
       </div>
     </div>
 
-    <div class="card transcript">
-      <div class="transcript-head">
-        <div id="status" role="status">Ready</div>
-        <div class="meter" id="meter" hidden title="Microphone level"><div></div></div>
+    <section>
+      <div class="captions-head">
+        <h2>Live captions</h2>
+        <button id="clear" class="secondary small">Clear</button>
       </div>
-      <div class="cols" aria-hidden="true"><span>Heard</span><span>Translation</span></div>
       <div id="log" aria-live="polite"></div>
       <form class="typed" id="typed">
-        <input type="text" id="typedText" placeholder="Or type something to translate">
-        <button type="submit" class="secondary">Translate</button>
+        <input type="text" id="typedText" placeholder="Or type something to translate" aria-label="Text to translate">
+        <button type="submit">Translate</button>
       </form>
-    </div>
+    </section>
 
     <div id="installHint" class="card note" hidden></div>
   </section>
 </main>
-<script type="module" src="app.js?v=11"></script>
-<script type="module" src="notes.js?v=13"></script>
+<script type="module" src="app.js?v=13"></script>
+<script type="module" src="notes.js?v=14"></script>
+<script type="module" src="ui.js?v=1"></script>
 </body>
 </html>
