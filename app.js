@@ -136,8 +136,27 @@ function showReply(row, raw) {
   const reply = parseReply(raw);
   row.querySelector(".tag").textContent = reply.lang;
   row.querySelector(".dst").textContent = reply.text;
+  // In a meeting, one line tagged with two different non-English languages usually means two
+  // sources are playing at once (e.g. a Tamil video and a Hindi video), not one person mixing.
+  if (tab && reply.lang) {
+    const spoken = new Set(reply.lang.toLowerCase().split("+").map((l) => l.trim()).filter((l) => l && l !== "english"));
+    if (spoken.size >= 2) {
+      showMixWarning(`Different languages were heard at the same time (${reply.lang}). If more than one video `
+        + "or call is playing, share only the one you want translated.");
+    }
+  }
   return reply;
 }
+
+// --- Mixed-audio warning (Meeting + my mic) ---
+// Sharing a whole window or screen sends EVERY sound on it, e.g. two videos playing at once. Gemini
+// hears one mixed stream, so it cannot keep the speakers apart and may label it all as one language.
+function showMixWarning(text) {
+  $("mixWarnText").textContent = text;
+  $("mixWarn").hidden = false;
+}
+const hideMixWarning = () => { $("mixWarn").hidden = true; };
+$("mixWarnFix").onclick = () => { if (listening) stopListening(); startListening(); };
 
 // --- Typed text ---
 const typedHistory = [];
@@ -242,7 +261,10 @@ async function startListening() {
     // Ask the browser to share a tab. We only want its SOUND (the other people in the meeting).
     setStatus("Choose the meeting tab to share…");
     try {
-      tab = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      // Offer tabs first, and leave this translator's own tab out of the list.
+      tab = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: "browser" }, audio: true, selfBrowserSurface: "exclude",
+      });
     } catch {
       setStatus("Sharing was cancelled. Press Resume listening and pick the meeting tab.", "bad");
       return;
@@ -252,6 +274,12 @@ async function startListening() {
       tab = null;
       setStatus('No sound was shared. Pick the meeting TAB (not a window or screen) and tick "Also share tab audio".', "bad");
       return;
+    }
+    const surface = tab.getVideoTracks()[0]?.getSettings?.().displaySurface;
+    if (surface && surface !== "browser") {
+      showMixWarning(`You shared a whole ${surface === "monitor" ? "screen" : "window"}, so every sound on it is mixed `
+        + "together (for example two videos at once). Translation can't tell them apart and may label "
+        + "everything as one language. For clean results, share just the meeting tab.");
     }
     tab.getVideoTracks().forEach((t) => { t.enabled = false; }); // the picture is not needed
     // If the person clicks the browser's own "Stop sharing" button, stop listening as well.
@@ -310,6 +338,7 @@ function stopListening() {
   audioCtx?.close();
   wakeLock?.release().catch(() => {});
   translator = mic = tab = audioCtx = wakeLock = null;
+  hideMixWarning();
   if (interimRow) { interimRow.remove(); interimRow = null; }
   $("toggle").textContent = "Start listening";
   $("toggle").classList.remove("live");

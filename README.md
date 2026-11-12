@@ -70,6 +70,7 @@ It's free: each person uses their own free Google Gemini key, saved only on thei
 | "Microphone access was blocked" | Tap the icon left of the address bar, allow the microphone, and reload. On a Mac also check System Settings → Privacy & Security → Microphone. |
 | It stopped listening | The screen probably locked. Tap **Resume listening**. |
 | Wrong language in Fast mode | Switch to **Accurate**. |
+| "Multiple audio sources detected" (Meeting mode) | You shared a whole window or screen, or two videos/calls are playing at once. Their sounds get mixed and can't be told apart. Tap **Share one tab instead** and pick just the meeting tab. |
 
 ### Privacy
 

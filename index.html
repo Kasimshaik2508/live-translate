@@ -16,7 +16,7 @@
   :root {
     --bg: #f4f4fb; --glow: rgba(99, 91, 255, .16); --panel: #ffffff; --soft: #f6f6fc; --text: #15152a;
     --muted: #6a6a85; --line: #e3e3f0; --accent: #5b4ff5; --accent-2: #8b5cf6; --accent-text: #ffffff;
-    --accent-soft: #eeedfe; --seg-on: #ffffff; --live: #e5384f; --level: #1f9d6b; --error: #c0262d;
+    --accent-soft: #eeedfe; --seg-on: #ffffff; --warn-bg: #fff6e5; --warn-line: #f3d08a; --warn-text: #7a4b00; --live: #e5384f; --level: #1f9d6b; --error: #c0262d;
     --radius: 22px; --shadow: 0 1px 2px rgba(21,21,42,.04), 0 12px 40px rgba(21,21,42,.07);
     --dock-h: 0px;
   }
@@ -24,7 +24,7 @@
     :root {
       --bg: #0d0d16; --glow: rgba(124, 116, 255, .22); --panel: #171724; --soft: #1e1e2e; --text: #eeeef8;
       --muted: #9b9bb5; --line: #2a2a3e; --accent: #8c84ff; --accent-2: #b48cff; --accent-text: #0d0d16;
-      --accent-soft: #25254a; --seg-on: #2e2e4d; --live: #ff6378; --level: #4cd49b; --error: #ff8a95;
+      --accent-soft: #25254a; --seg-on: #2e2e4d; --warn-bg: #2e2412; --warn-line: #6b5121; --warn-text: #ffcf7a; --live: #ff6378; --level: #4cd49b; --error: #ff8a95;
       --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 40px rgba(0,0,0,.35);
     }
   }
@@ -149,6 +149,15 @@
   }
   #resumeBtn { border-radius: 999px; min-width: 200px; }
   #sessionMsg { margin: 0; color: var(--text); font-weight: 550; }
+
+  /* warning: a window/screen (several sounds mixed) was shared instead of one tab */
+  .warn { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 16px;
+    background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn-text); font-size: .9rem; }
+  .warn-ic { font-size: 1.2rem; line-height: 1.2; }
+  .warn > div { flex: 1; min-width: 0; }
+  .warn b { display: block; margin-bottom: 2px; }
+  .warn button { flex: none; background: var(--warn-text); color: var(--warn-bg); }
+  @media (max-width: 640px) { .warn { flex-wrap: wrap; } .warn button { width: 100%; } }
 
   /* what the session runs: two on/off switches */
   .features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -355,6 +364,11 @@
         <p id="modeHint" class="note"></p>
         <p id="audioHint" class="note" hidden></p>
       </div>
+      <div id="mixWarn" class="warn" role="alert" hidden>
+        <span class="warn-ic" aria-hidden="true">⚠</span>
+        <div><b>Multiple audio sources detected</b><span id="mixWarnText"></span></div>
+        <button id="mixWarnFix" type="button" class="small">Share one tab instead</button>
+      </div>
 
       <div class="features" role="group" aria-label="What this session runs">
         <button type="button" class="feat" id="featTranslate" aria-pressed="true">
@@ -398,7 +412,7 @@
     <div id="installHint" class="card note" hidden></div>
   </section>
 </main>
-<script type="module" src="app.js?v=14"></script>
+<script type="module" src="app.js?v=15"></script>
 <script type="module" src="notes.js?v=15"></script>
 <script type="module" src="ui.js?v=2"></script>
 <script type="module" src="session.js?v=1"></script>
