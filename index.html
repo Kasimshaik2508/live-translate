@@ -147,7 +147,7 @@
   #sessionBtn.live::before {
     --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='6' y='6' width='12' height='12' rx='2.5'/%3E%3C/svg%3E");
   }
-  #resumeBtn { border-radius: 999px; min-width: 200px; }
+  #resumeBtn, #pauseBtn { border-radius: 999px; min-width: 200px; }
   #sessionMsg { margin: 0; color: var(--text); font-weight: 550; }
 
   /* warning: a window/screen (several sounds mixed) was shared instead of one tab */
@@ -276,8 +276,8 @@
       border-top: 1px solid var(--line); box-shadow: 0 -8px 30px rgba(0,0,0,.08);
     }
     .dock .statusline { order: -1; }
-    #sessionBtn, #resumeBtn { width: 100%; min-width: 0; min-height: 56px; }
-    #resumeBtn { min-height: 46px; }
+    #sessionBtn, #resumeBtn, #pauseBtn { width: 100%; min-width: 0; min-height: 56px; }
+    #resumeBtn, #pauseBtn { min-height: 46px; }
     .row { padding: 14px 16px; }
     .row .dst { font-size: 1.06rem; }
   }
@@ -387,6 +387,7 @@
       <div class="dock">
         <button id="toggle" hidden>Start listening</button>
         <button id="sessionBtn">Start class session</button>
+        <button id="pauseBtn" class="secondary" hidden>Pause</button>
         <button id="resumeBtn" class="secondary" hidden>Resume listening</button>
         <div class="statusline">
           <div class="meter" id="meter" hidden title="Microphone level"><div></div></div>
@@ -412,9 +413,9 @@
     <div id="installHint" class="card note" hidden></div>
   </section>
 </main>
-<script type="module" src="app.js?v=16"></script>
+<script type="module" src="app.js?v=17"></script>
 <script type="module" src="notes.js?v=15"></script>
 <script type="module" src="ui.js?v=2"></script>
-<script type="module" src="session.js?v=1"></script>
+<script type="module" src="session.js?v=2"></script>
 </body>
 </html>

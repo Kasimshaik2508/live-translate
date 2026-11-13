@@ -13,6 +13,7 @@ const $ = (id) => document.getElementById(id);
 const mic = $("toggle");                 // app.js's Start/Stop listening button (hidden)
 const btn = $("sessionBtn");
 const resume = $("resumeBtn");
+const pause = $("pauseBtn");
 const chips = { translate: $("featTranslate"), notes: $("featNotes") };
 
 const want = { translate: true, notes: true }; // what the next session runs (chosen before Start)
@@ -20,6 +21,7 @@ let active = false;                             // a session is running
 let captions = true;                            // translation shown on screen during the session
 let notesBusy = false;                          // notes are starting or ending (async database work)
 let pausedClass = "";                           // class whose notes were switched off mid-session
+let paused = false;                             // listening is paused (app.js tells us through "listen-paused")
 
 try { Object.assign(want, JSON.parse(localStorage.getItem("session_features") || "{}")); } catch { /* storage blocked */ }
 const remember = () => { try { localStorage.setItem("session_features", JSON.stringify(want)); } catch { /* storage blocked */ } };
@@ -76,7 +78,7 @@ async function endSession() {
   const hadNotes = notesOn();
   active = false;
   pausedClass = "";
-  stopMic();
+  stopMic(); // stopping also clears a pause (app.js)
   await endNotes(); // marks notes busy before anything re-renders, so the open class is not seen as "resumed"
   say(hadNotes ? "Class session ended. Translation stopped and your notes are saved." : "");
   render();
@@ -116,8 +118,9 @@ function render() {
   document.body.classList.toggle("captions-off", active && !captions);
 
   if (active) {
-    setChip(chips.translate, captions, captions ? "Showing captions" : "Captions hidden");
-    setChip(chips.notes, notes, notesBusy ? "Saving…" : notes ? "Recording" : "Off · tap to record");
+    setChip(chips.translate, captions, paused ? "Paused" : captions ? "Showing captions" : "Captions hidden");
+    setChip(chips.notes, notes, notesBusy ? "Saving…" : notes ? (paused ? "Paused" : "Recording") : "Off · tap to record");
+    for (const chip of Object.values(chips)) if (paused) chip.classList.remove("recording"); // no red dot while paused
   } else {
     setChip(chips.translate, want.translate, want.translate ? "On" : "Off");
     setChip(chips.notes, want.notes && notesAvailable(), notesAvailable() ? (want.notes ? "On" : "Off") : "Not available yet");
@@ -132,11 +135,23 @@ function render() {
     : want.translate && withNotes ? "Start class session"
       : withNotes ? "Start recording notes"
         : want.translate ? "Start translating" : "Choose what to run";
-  resume.hidden = !(micNeeded() && !micLive());
+  // Pause only while sound is actually being sent; Resume when paused, or when the mic stopped on its own.
+  pause.hidden = !(active && micLive() && !paused);
+  resume.hidden = !((micNeeded() && !micLive()) || (active && paused));
+  resume.textContent = paused ? "Resume" : "Resume listening";
 }
 
 btn.onclick = () => (active ? endSession() : startSession());
-resume.onclick = () => startMic();
+// Pause and Resume are only requests: app.js owns the audio and reports back with "listen-paused".
+pause.onclick = () => {
+  document.dispatchEvent(new CustomEvent("listen-pause", { detail: true }));
+  say(notesOn() ? "Paused. The class stays open; nothing is translated or saved until you resume." : "Paused.");
+};
+resume.onclick = () => {
+  if (paused) { document.dispatchEvent(new CustomEvent("listen-pause", { detail: false })); say(""); }
+  else startMic();
+};
+document.addEventListener("listen-paused", (e) => { paused = e.detail; render(); });
 chips.translate.onclick = () => flip("translate");
 chips.notes.onclick = () => flip("notes");
 

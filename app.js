@@ -185,6 +185,25 @@ $("typed").onsubmit = async (e) => {
 // --- Live listening ---
 let listening = false;
 let mic = null, tab = null, audioCtx = null, translator = null, wakeLock = null, interimRow = null;
+
+// --- Pause ---
+// Pausing keeps everything open (the microphone, the shared meeting tab, the Gemini connection and the class
+// notes) and just stops sending sound. Resuming is instant, and a meeting tab does not have to be picked again.
+// WHY ~1.5 s of silence first: Gemini ends a sentence after a short silence, so without it the sentence you were
+// in the middle of would never be finished or shown.
+let paused = false, pausedAt = 0;
+const SILENCE_TAIL_MS = 1500;
+function setPaused(on) {
+  if (paused === on) return;
+  paused = on;
+  pausedAt = Date.now();
+  document.dispatchEvent(new CustomEvent("listen-paused", { detail: on })); // session.js shows the right buttons
+  if (!listening) return;
+  if (on) setStatus("Paused. Nothing is sent or saved until you resume.");
+  else setStatus("Listening… speak in any language", "live");
+}
+// session.js asks for a pause or a resume with this event; this file owns the audio, so it does the work.
+document.addEventListener("listen-pause", (e) => { if (listening) setPaused(!!e.detail); });
 const sentenceRows = new Map();
 
 // Continuous mode: heard and translated words arrive as separate streams of fragments.
@@ -322,6 +341,12 @@ async function startListening() {
   for (const stream of [mic, tab]) if (stream) audioCtx.createMediaStreamSource(stream).connect(worklet);
   worklet.connect(audioCtx.destination); // outputs silence; keeps the node running
   worklet.port.onmessage = ({ data }) => {
+    if (paused) {
+      $("meter").firstElementChild.style.width = "0%";
+      // Only the first moments of a pause send (silent) sound, so the last sentence gets finished.
+      if (Date.now() - pausedAt < SILENCE_TAIL_MS) translator?.sendAudio(new ArrayBuffer(data.pcm.byteLength));
+      return;
+    }
     $("meter").firstElementChild.style.width = `${Math.min(100, data.peak * 140)}%`;
     translator?.sendAudio(data.pcm); // buffered until the connection is open
   };
@@ -335,6 +360,7 @@ async function startListening() {
 
 function stopListening() {
   listening = false;
+  setPaused(false);
   translator?.stop();
   mic?.getTracks().forEach((t) => t.stop());
   tab?.getTracks().forEach((t) => t.stop());
