@@ -200,10 +200,18 @@
   .captions-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 6px 4px 12px; }
   .captions-head h2 { margin: 0; font-size: 1.05rem; }
   .captions-head h2 span { color: var(--muted); font-weight: 500; font-size: .85rem; margin-left: 6px; }
-  #log { display: flex; flex-direction: column; gap: 12px; }
+  /* ONE box of fixed height (about 8 lines) that scrolls inside itself; older lines are a swipe/scroll up */
+  .logwrap { position: relative; }
+  #log {
+    height: 19rem; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin; padding: 2px 20px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow);
+  }
+  #jumpLatest { position: absolute; right: 14px; bottom: 14px; border-radius: 999px; box-shadow: var(--shadow); }
+  body.captions-off #jumpLatest { display: none; }
   #log:empty {
-    border: 1.5px dashed var(--line); border-radius: var(--radius); padding: 44px 20px;
-    align-items: center; text-align: center;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+    background: transparent; box-shadow: none; border: 1.5px dashed var(--line);
   }
   #log:empty::before {
     content: ""; width: 54px; height: 54px; border-radius: 50%; margin-bottom: 12px;
@@ -211,17 +219,15 @@
   }
   #log:empty::after { content: "Press Start class session and speak.\A Translations appear here as people talk."; white-space: pre-line; color: var(--muted); font-size: .95rem; }
   .row {
-    display: flex; flex-direction: column; gap: 6px; padding: 16px 20px;
-    background: var(--panel); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow);
-    animation: rise .22s ease-out;
+    display: flex; flex-direction: column; gap: 6px; padding: 12px 0;
+    border-bottom: 1px solid var(--line); animation: rise .22s ease-out;
   }
+  .row:last-child { border-bottom: 0; }
   @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
   .row > div:last-child { display: flex; flex-direction: column; gap: 6px; }
   .row .src { order: 0; color: var(--muted); font-size: .92rem; overflow-wrap: anywhere; }
   .row .src:empty { display: none; }
   .row .dst { font-size: 1.14rem; font-weight: 550; line-height: 1.45; overflow-wrap: anywhere; }
-  .row:last-child { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
-  .row.interim { box-shadow: none; background: var(--soft); }
   .row.interim .src { font-style: italic; }
   .row.interim .dst:empty { display: none; }
   .row .dst:empty::after { content: "Translating…"; color: var(--muted); font-weight: 400; font-size: .95rem; }
@@ -278,7 +284,8 @@
     .dock .statusline { order: -1; }
     #sessionBtn, #resumeBtn, #pauseBtn { width: 100%; min-width: 0; min-height: 56px; }
     #resumeBtn, #pauseBtn { min-height: 46px; }
-    .row { padding: 14px 16px; }
+    #log { height: 16rem; padding: 2px 16px; }
+    .row { padding: 10px 0; }
     .row .dst { font-size: 1.06rem; }
   }
 
@@ -401,7 +408,10 @@
         <h2>Live captions</h2>
         <button id="clear" class="secondary small">Clear</button>
       </div>
-      <div id="log" aria-live="polite"></div>
+      <div class="logwrap">
+        <div id="log" aria-live="polite" tabindex="0" aria-label="Live captions"></div>
+        <button type="button" id="jumpLatest" class="small" hidden>↓ Latest</button>
+      </div>
       <div id="captionsOff" class="note">Captions are hidden. Still listening, so your class notes keep recording.
         Switch <b>Live translation</b> on to see them again.</div>
       <form class="typed" id="typed">
@@ -413,7 +423,7 @@
     <div id="installHint" class="card note" hidden></div>
   </section>
 </main>
-<script type="module" src="app.js?v=17"></script>
+<script type="module" src="app.js?v=18"></script>
 <script type="module" src="notes.js?v=15"></script>
 <script type="module" src="ui.js?v=2"></script>
 <script type="module" src="session.js?v=2"></script>

@@ -115,20 +115,29 @@ function setStatus(text, kind = "") {
   $("status").className = kind;
 }
 
-// Auto-follow the newest line ONLY if the reader is already near the bottom. Otherwise every new
-// translated fragment would yank the page down while they are scrolling up to re-read something.
-// We measure BEFORE the page grows, because adding text makes the page taller and would make
-// "near the bottom" look false.
-const isNearBottom = () => window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 160;
+// The captions live in ONE fixed-height box (#log) that scrolls inside itself, so people can swipe up to re-read.
+// New text follows the bottom only while the reader IS at the bottom; once they scroll up it stays put (so it
+// never yanks them away from what they are reading) and a "Latest" button appears to jump back down.
+// WHY a scroll listener + one MutationObserver: text arrives in many small pieces from several functions
+// (heard, translated, interim, typed). One observer covers them all, instead of each one scrolling by itself.
+const logBox = $("log");
+let stick = true; // true while the reader is at (or near) the bottom of the box
+const atBottom = () => logBox.scrollHeight - logBox.scrollTop - logBox.clientHeight < 48;
+const toBottom = () => { logBox.scrollTop = logBox.scrollHeight; };
+logBox.addEventListener("scroll", () => { stick = atBottom(); $("jumpLatest").hidden = stick; });
+new MutationObserver(() => {
+  if (!logBox.childElementCount) stick = true; // Clear was pressed: start following again
+  if (stick) toBottom();
+  $("jumpLatest").hidden = stick;
+}).observe(logBox, { childList: true, subtree: true, characterData: true });
+$("jumpLatest").onclick = () => { stick = true; toBottom(); $("jumpLatest").hidden = true; };
 
 function addRow(text, interim = false) {
   const row = document.createElement("div");
   row.className = "row" + (interim ? " interim" : "");
   row.innerHTML = '<div class="src"></div><div><span class="tag"></span><div class="dst"></div></div>';
   row.querySelector(".src").textContent = text;
-  const follow = isNearBottom();
   $("log").append(row);
-  if (follow) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
   return row;
 }
 
@@ -241,9 +250,7 @@ function onTranslated(fragment) {
     line = live.lines[live.outIndex];
   }
   live.outAt = now;
-  const follow = isNearBottom();
   appendText(line.querySelector(".dst"), fragment);
-  if (follow) line.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 const handlers = {
