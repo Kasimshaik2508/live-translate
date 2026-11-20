@@ -25,7 +25,7 @@ import { GoogleGenAI } from "https://cdn.jsdelivr.net/npm/@google/genai@2.29.1/+
 import {
   renderMarkdown, filterByTimeRange, transcriptText, fmtTime, dateKey,
   notesPrompt, askPrompt, catchupPrompt, toRow, fromRow, pageAll,
-} from "./notes-core.js?v=5";
+} from "./notes-core.js?v=6";
 
 // ---------- settings you may want to change ----------
 // Supabase project settings. The "anon / publishable" key is MEANT to be public (it sits in browser
@@ -57,12 +57,15 @@ const byId = (a, b) => a.id - b.id;
 let dbPromise = null;
 function openLocalDb() {
   dbPromise ??= new Promise((resolve, reject) => {
-    const open = indexedDB.open("class-notes", 1);
+    // Version 2 adds the "folders" store. Upgrading keeps every existing class, line and note.
+    const open = indexedDB.open("class-notes", 2);
     open.onupgradeneeded = () => {
       const db = open.result;
-      db.createObjectStore("sessions", { keyPath: "id", autoIncrement: true });
-      db.createObjectStore("chunks", { keyPath: "id", autoIncrement: true }).createIndex("bySession", "sessionId");
-      db.createObjectStore("notes", { keyPath: "id", autoIncrement: true }).createIndex("bySession", "sessionId");
+      const has = (n) => db.objectStoreNames.contains(n);
+      if (!has("sessions")) db.createObjectStore("sessions", { keyPath: "id", autoIncrement: true });
+      if (!has("chunks")) db.createObjectStore("chunks", { keyPath: "id", autoIncrement: true }).createIndex("bySession", "sessionId");
+      if (!has("notes")) db.createObjectStore("notes", { keyPath: "id", autoIncrement: true }).createIndex("bySession", "sessionId");
+      if (!has("folders")) db.createObjectStore("folders", { keyPath: "id", autoIncrement: true });
     };
     open.onsuccess = () => resolve(open.result);
     open.onerror = () => reject(open.error);
@@ -90,6 +93,7 @@ async function run(name, mode, fn) {
 const local = {
   add: (kind, obj) => run(kind, "readwrite", (s) => asPromise(s.add(obj))),
   put: (kind, obj) => run(kind, "readwrite", (s) => asPromise(s.put(obj))),
+  del: (kind, id) => run(kind, "readwrite", (s) => asPromise(s.delete(id))),
   all: (kind) => run(kind, "readonly", (s) => asPromise(s.getAll())),
   async bySession(kind, id, afterId = 0) {
     const rows = await run(kind, "readonly", (s) => asPromise(s.index("bySession").getAll(id)));
@@ -121,7 +125,7 @@ const local = {
 // auth.uid()), and the security rules only show you your own rows.
 // =====================================================================================
 let sb = null; // the Supabase client, created after the library loads
-const TABLES = { sessions: "class_sessions", chunks: "class_chunks", notes: "class_notes" };
+const TABLES = { sessions: "class_sessions", chunks: "class_chunks", notes: "class_notes", folders: "class_folders" };
 
 const cloud = {
   async add(kind, obj) {
@@ -133,6 +137,10 @@ const cloud = {
   async put(kind, obj) {
     const { id, ...rest } = obj;
     const { error } = await sb.from(TABLES[kind]).update(toRow(kind, rest)).eq("id", id);
+    if (error) throw error;
+  },
+  async del(kind, id) {
+    const { error } = await sb.from(TABLES[kind]).delete().eq("id", id);
     if (error) throw error;
   },
   async all(kind) {
@@ -159,6 +167,7 @@ const dbPut = (kind, obj) => store.put(kind, obj);
 const dbAll = (kind) => store.all(kind);
 const dbBySession = (kind, id, afterId = 0) => store.bySession(kind, id, afterId);
 const dbDeleteSession = (id) => store.deleteSession(id);
+const dbDel = (kind, id) => store.del(kind, id);
 
 // ---------- Gemini ----------
 let client = null, clientKey = "";
@@ -276,69 +285,25 @@ panel.id = "cn";
 panel.className = "card";
 panel.hidden = true;
 panel.innerHTML = `
-  <h2>Class notes</h2>
+  <h2>Class setup</h2>
 
   <div id="cnMain" hidden>
     <p id="cnImport" class="note" hidden></p>
-    <label class="cn-bar">Showing class <select id="cnSession"></select></label>
-
-    <div class="cn-tabs" role="tablist">
-      <button type="button" role="tab" data-tab="record" aria-selected="true">Record</button>
-      <button type="button" role="tab" data-tab="notes" aria-selected="false">Notes</button>
-      <button type="button" role="tab" data-tab="ask" aria-selected="false">Ask</button>
-      <button type="button" role="tab" data-tab="catch" aria-selected="false">Catch up</button>
+    <select id="cnSession" hidden></select>
+    <p class="note" id="cnIntro" style="margin-top:0">Optional: name the class, or choose a type. Notes record when <b>Class notes</b> is switched on above and the session is started. For a Google Meet or Zoom call, choose type <b>Meeting</b>. To add to an old class, use <b>Continue recording</b> on the Class notes page.</p>
+    <label>Start as <select id="cnPick"></select></label>
+    <div id="cnKindRow" style="margin-top:10px">
+      <label>Type <select id="cnKind">
+        <option value="class">Class (lecture notes)</option>
+        <option value="meeting">Meeting (notes with decisions and action items)</option>
+      </select></label>
     </div>
-
-    <div class="cn-pane" data-pane="record">
-      <p class="note" id="cnIntro" style="margin-top:0">Name the class here (optional). Notes record when <b>Class notes</b> is switched on above and the session is started; you can switch them on or off at any time without stopping translation. For a Google Meet or Zoom call, choose type <b>Meeting</b>.</p>
-      <label>Start as <select id="cnPick"></select></label>
-      <div id="cnKindRow" style="margin-top:10px">
-        <label>Type <select id="cnKind">
-          <option value="class">Class (lecture notes)</option>
-          <option value="meeting">Meeting (notes with decisions and action items)</option>
-        </select></label>
-      </div>
-      <div class="keyrow" style="margin-top:10px">
-        <input id="cnTitle" type="text" placeholder="Class title (optional)">
-        <button id="cnStart">Start recording notes</button>
-        <button id="cnEnd" class="secondary" hidden>End class</button>
-      </div>
-      <p id="cnMatch" class="note" hidden></p>
+    <div class="keyrow" style="margin-top:10px">
+      <input id="cnTitle" type="text" placeholder="Class title (optional)">
+      <button id="cnStart">Start recording notes</button>
+      <button id="cnEnd" class="secondary" hidden>End class</button>
     </div>
-
-    <div class="cn-pane" data-pane="notes" hidden>
-      <div id="cnNotes" class="box notes note">No notes yet.</div>
-      <div class="cn-actions">
-        <button id="cnUpdate" class="secondary small">Update notes now</button>
-        <button id="cnExport" class="secondary small">Download .md</button>
-        <button id="cnRename" class="secondary small">Rename class</button>
-        <button id="cnDelete" class="secondary small">Delete class</button>
-      </div>
-      <details id="cnManage" class="cn-manage">
-        <summary>Manage all classes</summary>
-        <div id="cnManageList"></div>
-      </details>
-    </div>
-
-    <div class="cn-pane" data-pane="ask" hidden>
-      <form id="cnAskForm" class="keyrow">
-        <input id="cnQ" type="text" placeholder="Ask about this class, or anything related">
-        <button type="submit">Ask</button>
-      </form>
-      <label class="inline"><input type="checkbox" id="cnAll"> Search all my classes</label>
-      <div id="cnAnswer" class="box" hidden></div>
-    </div>
-
-    <div class="cn-pane" data-pane="catch" hidden>
-      <p class="note">Zoned out? Pick the time window you missed and get a short summary of what was said.</p>
-      <div class="cn-catch">
-        <label>Day <input type="date" id="cnDate"></label>
-        <label>From <input type="time" id="cnFrom"></label>
-        <label>To <input type="time" id="cnTo"></label>
-        <button id="cnCatch" class="secondary">Summarise</button>
-      </div>
-      <div id="cnCatchOut" class="box" hidden></div>
-    </div>
+    <p id="cnMatch" class="note" hidden></p>
 
     <p id="cnStatus" class="note"></p>
     <p id="cnUsage" class="note" style="margin:6px 0 0"></p>
@@ -347,15 +312,8 @@ panel.innerHTML = `
 document.querySelector("main").append(panel);
 const $ = (id) => panel.querySelector("#" + id);
 
-// Tabs: show one pane, hide the others. aria-selected keeps screen readers informed.
-for (const tab of panel.querySelectorAll(".cn-tabs button")) {
-  tab.onclick = () => {
-    for (const t of panel.querySelectorAll(".cn-tabs button")) t.setAttribute("aria-selected", String(t === tab));
-    for (const pane of panel.querySelectorAll(".cn-pane")) pane.hidden = pane.dataset.pane !== tab.dataset.tab;
-  };
-}
-
-const setStatus = (text, bad = false) => { $("cnStatus").textContent = text; $("cnStatus").style.color = bad ? "var(--error)" : ""; };
+let lastStatus = { text: "", bad: false };
+const setStatus = (text, bad = false) => { lastStatus = { text, bad }; $("cnStatus").textContent = text; $("cnStatus").style.color = bad ? "var(--error)" : ""; };
 function show(box, html) { box.hidden = false; box.innerHTML = html; }
 const plain = (t) => `<p class="note">${t}</p>`;
 
@@ -408,12 +366,19 @@ function scanRows({ force = false } = {}) {
   return Promise.all(jobs);
 }
 
+// Show the (hidden-from-view) setup panel as soon as it can be used: signed in, or the translate screen is open.
+// session.js treats a hidden panel as "notes not available", so waiting for the 4-second timer lost early clicks.
+function syncPanel() {
+  panel.hidden = store === cloud ? !activeUserId : (document.getElementById("app")?.hidden ?? true);
+}
+const appEl = document.getElementById("app");
+if (appEl) new MutationObserver(syncPanel).observe(appEl, { attributes: true, attributeFilter: ["hidden"] });
+
 setInterval(async () => {
   // Show our panel only when the main translate screen is visible (not on the key setup screen).
   // Online mode: the notes are available as soon as you are signed in, even before a Gemini key is saved
   // or the translator is open, so you can just read old notes. Device-only mode keeps the old rule.
-  panel.hidden = store === cloud ? !activeUserId : (document.getElementById("app")?.hidden ?? true);
-  if (!rangeTouched) setDefaultRange();
+  syncPanel();
   if (!current) return;
   try {
     await scanRows();
@@ -553,13 +518,6 @@ $("cnEnd").onclick = async () => {
   }
 };
 
-$("cnUpdate").onclick = async () => {
-  const id = Number($("cnSession").value);
-  if (!id) return;
-  try { await scanRows({ force: true }); } catch (err) { setStatus(`Could not save lines: ${friendly(err)}`, true); return; }
-  await makeNotes(sessions.find((s) => s.id === id), { manual: true });
-};
-
 // ---------- 3. show notes / switch class / export ----------
 async function refresh(selectId) {
   sessions = (await dbAll("sessions")).sort((a, b) => b.id - a.id);
@@ -587,29 +545,11 @@ async function refresh(selectId) {
   );
   pick.value = [...pick.options].some((o) => o.value === chosen) ? chosen : "new";
   $("cnTitle").hidden = pick.value !== "new";
-  // "Manage all classes": one row per class with its own Delete button.
-  $("cnManageList").replaceChildren(...sessions.map((s) => {
-    const row = document.createElement("div");
-    row.className = "cn-mrow";
-    const name = document.createElement("span");
-    name.textContent = label(s);
-    if (!s.endedAt) { // still open (recording, or waiting to be resumed)
-      const tag = document.createElement("small");
-      tag.textContent = " · not ended";
-      name.append(tag);
-    }
-    const del = document.createElement("button");
-    del.type = "button";
-    del.className = "secondary small";
-    del.textContent = "Delete";
-    del.onclick = () => deleteClass(s.id);
-    row.append(name, del);
-    return row;
-  }));
-  if (!sessions.length) $("cnManageList").replaceChildren(Object.assign(document.createElement("p"), { className: "note", textContent: "No classes yet." }));
   checkSameName(); // also shows/hides the Type choice to match the "Start as" picker
   showUsage();
-  await showNotes();
+  await loadFolders();
+  syncPanel();
+  document.dispatchEvent(new CustomEvent("cn-change")); // the Class notes page redraws itself
 }
 
 // Cloud mode: who is signed in. Local mode: how much browser storage is used.
@@ -629,45 +569,29 @@ async function notesFor(id) {
   return (await dbBySession("notes", id)).sort(byId);
 }
 
-async function showNotes() {
-  const id = Number($("cnSession").value);
-  if (!id) { show($("cnNotes"), plain("No classes yet. Switch on Class notes and press Start class session.")); return; }
-  const notes = await notesFor(id);
-  show($("cnNotes"), notes.length
-    ? renderMarkdown(notes.map((n) => n.markdown).join("\n\n"))
-    : plain("Notes appear here a couple of minutes after the teacher starts talking."));
-}
-$("cnSession").onchange = () => showNotes().catch((err) => setStatus(friendly(err), true));
-
-$("cnExport").onclick = async () => {
-  const id = Number($("cnSession").value);
-  const session = sessions.find((s) => s.id === id);
-  if (!session) return;
+// ---------- folders ----------
+// A folder is just a name. A class sits in one folder or none (session.folderId). Deleting a folder never
+// deletes classes: they simply become "unfiled" again.
+let folders = [];
+let foldersOk = true; // false when the online "class_folders" table has not been created yet
+async function loadFolders() {
   try {
-    const notes = await notesFor(id);
-    const md = `# ${session.title}\n\n_${new Date(session.startedAt).toLocaleString()}_\n\n`
-      + (notes.map((n) => n.markdown).join("\n\n") || "(no notes yet)");
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
-    link.download = `${session.title.replace(/[^\w\- ]+/g, "").trim() || "class-notes"}.md`;
-    link.click();
-    URL.revokeObjectURL(link.href);
-  } catch (err) { setStatus(friendly(err), true); }
-};
+    folders = (await dbAll("folders")).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    foldersOk = true;
+  } catch { folders = []; foldersOk = false; }
+}
+const needFolders = () => { if (!foldersOk) throw new Error("Folders are not set up in your online database yet (one-time step)."); };
 
 // ---------- rename / delete a class ----------
-$("cnRename").onclick = async () => {
-  const session = sessions.find((s) => s.id === Number($("cnSession").value));
-  if (!session) return;
-  const title = prompt("New name for this class:", session.title)?.trim();
-  if (!title || title === session.title) return;
-  try {
-    session.title = title;
-    if (current?.id === session.id) current.title = title; // keep the live recording in sync
-    await dbPut("sessions", session);
-    await refresh(session.id);
-  } catch (err) { setStatus(friendly(err), true); }
-};
+async function renameClass(id, title) {
+  const session = sessions.find((s) => s.id === id);
+  title = String(title ?? "").trim();
+  if (!session || !title || title === session.title) return;
+  session.title = title;
+  if (current?.id === session.id) current.title = title; // keep the live recording in sync
+  await dbPut("sessions", session);
+  await refresh();
+}
 
 // Delete ANY class (from the Delete class button or the "Manage all classes" list). We always ask first,
 // because it cannot be undone. A class that is still recording can be deleted too: recording stops first.
@@ -675,8 +599,6 @@ async function deleteClass(id) {
   const session = sessions.find((s) => s.id === id);
   if (!session) return;
   const live = current?.id === id;
-  const warning = live ? "It is still recording, so recording will stop. " : "";
-  if (!confirm(`Delete "${session.title}"? ${warning}Its notes and saved transcript will be removed. This cannot be undone.`)) return;
   try {
     if (live) {
       current = null; // stops the capture loop from saving into this class
@@ -689,13 +611,12 @@ async function deleteClass(id) {
     while (busy) await new Promise((r) => setTimeout(r, 200));
     await dbDeleteSession(id);
     setStatus(`Deleted "${session.title}".`);
-    await refresh(sessions.find((s) => s.id !== id)?.id);
+    await refresh();
     $("cnPick").value = "new";
     $("cnTitle").hidden = false;
     checkSameName();
   } catch (err) { setStatus(friendly(err), true); }
 }
-$("cnDelete").onclick = () => deleteClass(Number($("cnSession").value));
 
 // ---------- 4. ask questions ----------
 // Simple "RAG" without a vector database: a class's notes are only a few pages, so we
@@ -718,48 +639,7 @@ async function classContext(ids) {
   return parts.join("\n\n");
 }
 
-$("cnAskForm").onsubmit = async (e) => {
-  e.preventDefault();
-  const question = $("cnQ").value.trim();
-  if (!question) return;
-  const ids = $("cnAll").checked ? sessions.map((s) => s.id) : [Number($("cnSession").value)].filter(Boolean);
-  show($("cnAnswer"), plain("Thinking…"));
-  try {
-    const answer = await askGemini(askPrompt(await classContext(ids), question));
-    show($("cnAnswer"), renderMarkdown(answer));
-  } catch (err) {
-    show($("cnAnswer"), plain(friendly(err)));
-  }
-};
-
-// ---------- 5. catch-up ----------
 const hhmm = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-
-// Default window = the last 15 minutes up to NOW. It keeps following the clock until you edit
-// one of the three boxes yourself (after that we leave your values alone).
-let rangeTouched = false;
-function setDefaultRange() {
-  const now = new Date();
-  $("cnDate").value = dateKey(now.getTime());
-  $("cnTo").value = hhmm(now);
-  $("cnFrom").value = hhmm(new Date(now - 15 * 60000));
-}
-for (const id of ["cnDate", "cnFrom", "cnTo"]) $(id).addEventListener("input", () => { rangeTouched = true; });
-setDefaultRange();
-
-$("cnCatch").onclick = async () => {
-  const id = Number($("cnSession").value);
-  if (!id) return;
-  const from = $("cnFrom").value, to = $("cnTo").value;
-  try {
-    const chunks = filterByTimeRange(await dbBySession("chunks", id), from, to, $("cnDate").value);
-    if (!chunks.length) { show($("cnCatchOut"), plain("No speech was saved between those times on that day.")); return; }
-    show($("cnCatchOut"), plain("Summarising…"));
-    show($("cnCatchOut"), renderMarkdown(await askGemini(catchupPrompt(transcriptText(chunks), from, to))));
-  } catch (err) {
-    show($("cnCatchOut"), plain(friendly(err)));
-  }
-};
 
 // ---------- 6. sign in (cloud mode only) ----------
 // Email "magic link" login: Supabase emails a link, clicking it opens this page again already signed in,
@@ -927,7 +807,7 @@ async function importOne(s) {
 }
 
 async function offerImport() {
-  const box = $("cnImport");
+  const box = document.getElementById("cnImport"); // the Class notes page may have moved this element, so look it up on the whole page
   box.hidden = true;
   if (store !== cloud) return;
   let old = [];
@@ -979,8 +859,6 @@ async function startApp() {
       if (last) makeNotes(old); // errors are shown in the status line
     }
     if (open.length && !current) await resumeClass(open[0]);
-    // Nothing to resume and you have classes? You are probably here to read notes: open the Notes tab.
-    else if (sessions.length && !current) panel.querySelector('[data-tab="notes"]').click();
   } catch (err) { setStatus(friendly(err), true); }
 }
 
@@ -995,6 +873,101 @@ async function resumeClass(session) {
   setStatus(`"${session.title}" is still open (it was not ended). Press Resume listening above to keep adding to it, or End class session when it is over.`);
   await refresh(session.id);
 }
+
+
+// =====================================================================================
+// THE API FOR THE CLASS NOTES PAGE (library.js)
+// library.js draws the sidebar page (folders, class list, chat). It never touches the database or Gemini
+// directly: it asks for things here, so the storage and Gemini code stays in one place. It redraws
+// whenever this file dispatches "cn-change" (after every refresh).
+// =====================================================================================
+async function updateNotesNow(id) {
+  try { await scanRows({ force: true }); } catch (err) { return { ok: false, message: `Could not save lines: ${friendly(err)}` }; }
+  lastStatus = { text: "", bad: false };
+  await makeNotes(sessions.find((s) => s.id === id), { manual: true });
+  return { ok: !lastStatus.bad, message: lastStatus.text };
+}
+
+async function catchUpClass(id, minutes = 15) {
+  const chunks = await dbBySession("chunks", id);
+  if (!chunks.length) return "No speech was saved in this class yet.";
+  const end = chunks.at(-1).ts, from = end - minutes * 60000;
+  const recent = chunks.filter((c) => c.ts >= from);
+  return askGemini(catchupPrompt(transcriptText(recent), hhmm(new Date(from)), hhmm(new Date(end))));
+}
+
+async function exportMarkdown(id) {
+  const session = sessions.find((s) => s.id === id);
+  if (!session) return;
+  const notes = await notesFor(id);
+  const md = `# ${session.title}\n\n_${new Date(session.startedAt).toLocaleString()}_\n\n`
+    + (notes.map((n) => n.markdown).join("\n\n") || "(no notes yet)");
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
+  link.download = `${session.title.replace(/[^\w\- ]+/g, "").trim() || "class-notes"}.md`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+// Continue an old class: pick it in the (hidden-from-notes-page) "Start as" list on the Live page; the
+// session button there then adds new lines and notes to it. Returns a message if it cannot be done now.
+function continueClass(id) {
+  if (current && current.id !== id) return `"${current.title}" is still recording. End that class session first.`;
+  if (current) return "";
+  const pick = $("cnPick");
+  if (![...pick.options].some((o) => o.value === String(id))) return "That class is not available to continue.";
+  pick.value = String(id);
+  pick.onchange();
+  return "";
+}
+
+window.cnApi = {
+  get sessions() { return sessions; },
+  get folders() { return folders; },
+  get foldersOk() { return foldersOk; },
+  get recordingId() { return current?.id ?? null; },
+  get ready() { return store === cloud ? !!activeUserId : true; },
+  get userKey() { return store === cloud ? String(activeUserId) : "device"; },
+  get where() { return store === cloud ? "your online account" : "this device"; },
+  notesFor, chunksFor: (id) => dbBySession("chunks", id),
+  ask: async (ids, question) => askGemini(askPrompt(await classContext(ids), question)),
+  catchUp: catchUpClass, updateNotes: updateNotesNow, exportMarkdown, continueClass,
+  rename: renameClass, remove: deleteClass,
+  async createFolder(name) {
+    needFolders();
+    name = String(name ?? "").trim();
+    if (!name) return null;
+    const id = await dbAdd("folders", { name });
+    await refresh();
+    return id;
+  },
+  async renameFolder(id, name) {
+    needFolders();
+    name = String(name ?? "").trim();
+    const f = folders.find((x) => x.id === id);
+    if (!f || !name) return;
+    await dbPut("folders", { ...f, name });
+    await refresh();
+  },
+  async deleteFolder(id) {
+    needFolders();
+    if (store === local) { // the browser database has no "on delete" rule, so un-file the classes ourselves
+      for (const s of sessions.filter((x) => x.folderId === id)) await dbPut("sessions", { ...s, folderId: null });
+    }
+    await dbDel("folders", id);
+    await refresh();
+  },
+  async moveClass(id, folderId) {
+    needFolders();
+    const session = sessions.find((s) => s.id === id);
+    if (!session) return;
+    session.folderId = folderId ?? null;
+    if (current?.id === id) current.folderId = session.folderId; // so "End class" does not overwrite it
+    await dbPut("sessions", session);
+    await refresh();
+  },
+  friendly, renderMarkdown, fmtTime,
+};
 
 if (CLOUD) buildGate(); // cover the app right away, before we know whether anyone is signed in
 

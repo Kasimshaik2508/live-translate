@@ -241,12 +241,12 @@
   form.typed button { border-radius: 13px; }
 
   /* ---------- big screens: class notes beside the translator ---------- */
-  @media (min-width: 1060px) {
-    main:has(#cn:not([hidden])) {
+  @media (min-width: 1280px) {
+    body[data-page=live] main:has(#cn:not([hidden])) {
       display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(340px, 1fr); column-gap: 24px; align-items: start;
     }
-    main:has(#cn:not([hidden])) > header, main:has(#cn:not([hidden])) > #setup { grid-column: 1 / -1; }
-    main:has(#cn:not([hidden])) #cn {
+    body[data-page=live] main:has(#cn:not([hidden])) > header, body[data-page=live] main:has(#cn:not([hidden])) > #setup { grid-column: 1 / -1; }
+    body[data-page=live] main:has(#cn:not([hidden])) #cn {
       grid-column: 2; grid-row: 2; margin-top: 0 !important;
       position: sticky; top: 86px; max-height: calc(100dvh - 106px); overflow-y: auto;
     }
@@ -298,7 +298,7 @@
   }
 </style>
 </head>
-<body>
+<body data-page="live">
 <main>
   <header>
     <img src="icons/icon-192.png" alt="">
@@ -424,8 +424,9 @@
   </section>
 </main>
 <script type="module" src="app.js?v=18"></script>
-<script type="module" src="notes.js?v=15"></script>
+<script type="module" src="notes.js?v=16"></script>
 <script type="module" src="ui.js?v=2"></script>
 <script type="module" src="session.js?v=2"></script>
+<script type="module" src="library.js?v=1"></script>
 </body>
 </html>

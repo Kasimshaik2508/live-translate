@@ -92,7 +92,8 @@ export function transcriptText(chunks) {
 // The page uses camelCase names (sessionId); the database uses snake_case (session_id).
 // COLS lists only the names that differ; toRow / fromRow translate in each direction.
 export const COLS = {
-  sessions: { startedAt: "started_at", endedAt: "ended_at" },
+  sessions: { startedAt: "started_at", endedAt: "ended_at", folderId: "folder_id" },
+  folders: {},
   chunks: { sessionId: "session_id" },
   notes: { sessionId: "session_id", fromTs: "from_ts", toTs: "to_ts", toChunkId: "to_chunk_id" },
 };
