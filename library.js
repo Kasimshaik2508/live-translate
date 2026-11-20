@@ -41,6 +41,7 @@ const ICON = {
   send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   spark: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.2 6.3L20.5 10.5l-6.3 2.2L12 19l-2.2-6.3L3.5 10.5l6.3-2.2z"/></svg>',
+  clip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l8.9-8.9a3.4 3.4 0 0 1 4.8 4.8l-8.9 8.9a1.7 1.7 0 0 1-2.4-2.4l8.2-8.2"/></svg>',
   chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
 };
 const icon = (name, cls = "") => h("span", { class: `lm-ic ${cls}`, "aria-hidden": "true", html: ICON[name] });
@@ -152,6 +153,21 @@ css.textContent = `
   .lm-sumfoot { display: flex; justify-content: center; padding: 0 12px 12px; }
   .lm-sumbody .lm-none { color: var(--muted); font-size: .93rem; margin: 10px 0 4px; }
 
+  /* attachments */
+  .lm-files { border: 1px solid var(--line); border-radius: 18px; background: var(--panel); padding: 12px 14px; }
+  .lm-files.drop { border-color: var(--accent); background: var(--accent-soft); }
+  .lm-fhead { display: flex; align-items: center; gap: 8px; }
+  .lm-fhead b { flex: 1; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+  .lm-fhint { margin: 6px 0 0; font-size: .84rem; color: var(--muted); }
+  .lm-flist { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; max-height: 15rem; overflow-y: auto; }
+  .lm-file { display: flex; align-items: center; gap: 12px; padding: 6px 4px 6px 6px; border-radius: 12px; cursor: pointer; }
+  .lm-file .lm-thumb { width: 44px; height: 44px; flex: none; border-radius: 10px; overflow: hidden; display: grid; place-items: center;
+    background: var(--soft); border: 1px solid var(--line); font-size: .7rem; font-weight: 800; color: var(--accent); letter-spacing: .03em; }
+  .lm-file .lm-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .lm-file .lm-ftext { flex: 1; min-width: 0; }
+  .lm-file .lm-fname { font-weight: 600; font-size: .93rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lm-file .lm-fmeta { font-size: .76rem; color: var(--muted); }
+  @media (hover: hover) { .lm-file:hover { background: var(--soft); } }
   .lm-chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .lm-chip { min-height: 38px; padding: 6px 14px; border-radius: 999px; background: var(--panel); color: var(--text);
     border: 1px solid var(--line); font-weight: 600; font-size: .9rem; }
@@ -582,7 +598,8 @@ function renderChat() {
   const msgs = h("div", { class: "lm-msgs", id: "lmMsgs" });
   const chips = h("div", { class: "lm-chips", id: "lmChips" }, ...QUICK.map((c) =>
     h("button", { type: "button", class: "lm-chip", onclick: () => send(c.label, c), title: c.hint }, icon("spark"), c.label)));
-  col.append(h("div", { class: "lm-scroll", id: "lmScroll" }, h("div", { class: "lm-inner" }, summary, chips, msgs)));
+  const files = h("div", { class: "lm-files", id: "lmFiles" });
+  col.append(h("div", { class: "lm-scroll", id: "lmScroll" }, h("div", { class: "lm-inner" }, summary, files, chips, msgs)));
 
   const ta = h("textarea", { rows: "1", placeholder: "Ask about this class, or anything related…", "aria-label": "Ask a question", id: "lmAsk" });
   const sendBtn = h("button", { type: "submit", class: "lm-send", "aria-label": "Send" }, icon("send"));
@@ -596,6 +613,7 @@ function renderChat() {
   col.append(h("div", { class: "lm-composer" }, form, h("p", { class: "lm-hint" }, "Answers use your class notes first, then general knowledge. They are labelled so you can tell which is which.")));
 
   renderSummary(s);
+  renderFiles(s);
   renderMsgs();
 }
 
@@ -662,6 +680,89 @@ function renderMsgs() {
   const sc = $("#lmScroll"); if (sc) requestAnimationFrame(() => { sc.scrollTop = sc.scrollHeight; });
 }
 
+
+// ---------- attached files ----------
+const fileKind = (f) => /^image\//.test(f.mime) ? "IMG" : /^video\//.test(f.mime) ? "VID" : f.mime === "application/pdf" ? "PDF"
+  : /presentation|powerpoint|\.pptx?$/i.test(f.mime + f.name) ? "PPT" : /word|\.docx?$/i.test(f.mime + f.name) ? "DOC"
+  : /sheet|excel|\.xlsx?$/i.test(f.mime + f.name) ? "XLS" : (f.name.split(".").pop() || "FILE").slice(0, 4).toUpperCase();
+const fmtSize = (n) => n < 1048576 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(n < 10485760 ? 1 : 0)} MB`;
+const picker = h("input", { type: "file", multiple: true, hidden: true,
+  accept: "image/*,video/*,application/pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.txt,.md,.csv" });
+document.body.append(picker);
+let pickFor = null;
+picker.addEventListener("change", () => { const list = [...picker.files]; picker.value = ""; if (pickFor != null) uploadFiles(pickFor, list); });
+
+async function uploadFiles(id, list) {
+  const box = $("#lmFiles");
+  const hint = box?.querySelector(".lm-fhint");
+  let done = 0;
+  for (const [i, file] of list.entries()) {
+    if (hint) hint.textContent = `Uploading ${i + 1} of ${list.length}: ${file.name}…`;
+    try { await A().addFile(id, file); done++; } catch (err) { fail(err); }
+  }
+  if (done) toast(`Added ${done} file${done === 1 ? "" : "s"}.`);
+  if (S.sel === id) renderFiles(sessionById(id));
+}
+
+// open in a new tab. The tab is opened first (inside the click) and pointed at the link afterwards,
+// because browsers block pop-ups that are opened after waiting for a network request.
+async function openFile(f, download = false) {
+  const tab = download ? null : window.open("", "_blank");
+  try {
+    const url = await A().fileUrl(f, { download });
+    if (download) { const a = h("a", { href: url, download: f.name }); document.body.append(a); a.click(); a.remove(); }
+    else if (tab) tab.location.href = url;
+    else location.href = url;
+  } catch (err) { tab?.close(); fail(err); }
+}
+
+let filesToken = 0;
+async function renderFiles(s) {
+  const box = $("#lmFiles");
+  if (!box || !s) return;
+  const token = ++filesToken;
+  const add = h("button", { type: "button", class: "secondary small", onclick: () => { pickFor = s.id; picker.click(); } }, icon("plus"), "Add files");
+  add.querySelector(".lm-ic").style.cssText = "width:14px;height:14px";
+  box.replaceChildren(h("div", { class: "lm-fhead" }, icon("clip"), h("b", {}, "Files"), add), h("p", { class: "lm-fhint" }, "Loading…"));
+  box.querySelector(".lm-fhead .lm-ic").style.cssText = "width:16px;height:16px;color:var(--accent)";
+  let list = [];
+  try { list = await A().files(s.id); }
+  catch { if (token === filesToken) box.querySelector(".lm-fhint").textContent = "Files need a one-time setup in your online database (see the setup SQL)."; return; }
+  if (token !== filesToken || S.sel !== s.id) return;
+  const hint = box.querySelector(".lm-fhint");
+  if (!list.length) { hint.textContent = "Add photos, PDFs, slides or videos for this class. Drop them here or press Add files. PDFs and photos are also read when you ask a question."; return; }
+  hint.remove();
+  box.append(h("div", { class: "lm-flist" }, list.map((f) => {
+    const thumb = h("div", { class: "lm-thumb" }, fileKind(f));
+    if (/^image\//.test(f.mime)) A().fileUrl(f).then((u) => { if (thumb.isConnected) thumb.replaceChildren(h("img", { src: u, alt: "", loading: "lazy" })); }).catch(() => {});
+    const more = h("button", { type: "button", class: "lm-more", "aria-label": `Options for ${f.name}`,
+      onclick: (e) => { e.stopPropagation(); openMenu(more, [
+        { label: "Open", run: () => openFile(f) },
+        { label: "Download", run: () => openFile(f, true) },
+        { label: "Remove from class", danger: true, run: () => removeFileUi(s, f) },
+      ]); } }, icon("more"));
+    return h("div", { class: "lm-file", role: "button", tabindex: "0", onclick: () => openFile(f), onkeydown: (e) => { if (e.key === "Enter") openFile(f); } },
+      thumb, h("div", { class: "lm-ftext" }, h("div", { class: "lm-fname" }, f.name), h("div", { class: "lm-fmeta" }, fmtSize(f.size))), more);
+  })));
+}
+
+async function removeFileUi(s, f) {
+  const yes = await askConfirm({ title: `Remove "${f.name}"?`, ok: "Remove", text: "The file is deleted from this class. This cannot be undone." });
+  if (!yes) return;
+  try { await A().removeFile(f); } catch (err) { fail(err); }
+  renderFiles(s);
+}
+
+// Drag files from the desktop onto the Files card.
+document.addEventListener("dragover", (e) => { const box = e.target.closest?.("#lmFiles"); if (box && e.dataTransfer?.types?.includes("Files")) { e.preventDefault(); box.classList.add("drop"); } });
+document.addEventListener("dragleave", (e) => { e.target.closest?.("#lmFiles")?.classList.remove("drop"); });
+document.addEventListener("drop", (e) => {
+  const box = e.target.closest?.("#lmFiles");
+  if (!box) return;
+  e.preventDefault(); box.classList.remove("drop");
+  if (S.sel != null && e.dataTransfer.files.length) uploadFiles(S.sel, [...e.dataTransfer.files]);
+});
+
 // Quick actions. "prompt" is what Gemini is asked; "label" is what shows in the chat.
 const QUICK = [
   { label: "Summarize", hint: "A short summary", prompt: "Summarize this class in a short, clear list of the main ideas. Keep it brief." },
@@ -690,7 +791,8 @@ async function send(text, quick = null) {
       const ids = S.scope === "all" ? api.sessions.map((x) => x.id)
         : S.scope === "folder" && s.folderId != null ? api.sessions.filter((x) => x.folderId === s.folderId).map((x) => x.id) : [id];
       const question = (history ? `Earlier in this chat:\n${history}\n\nNow answer this follow-up. ` : "") + (quick?.prompt ?? text);
-      reply = { role: "assistant", text: await api.ask(ids, question) };
+      const res = await api.ask(ids, question);
+      reply = { role: "assistant", text: res.text + (res.files.length ? `\n\nUsed attached file${res.files.length === 1 ? "" : "s"}: ${res.files.join(", ")}` : "") };
     }
   } catch (err) {
     reply = { role: "assistant", error: true, text: api.friendly(err) };

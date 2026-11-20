@@ -25,7 +25,7 @@ import { GoogleGenAI } from "https://cdn.jsdelivr.net/npm/@google/genai@2.29.1/+
 import {
   renderMarkdown, filterByTimeRange, transcriptText, fmtTime, dateKey,
   notesPrompt, askPrompt, catchupPrompt, toRow, fromRow, pageAll,
-} from "./notes-core.js?v=6";
+} from "./notes-core.js?v=7";
 
 // ---------- settings you may want to change ----------
 // Supabase project settings. The "anon / publishable" key is MEANT to be public (it sits in browser
@@ -58,7 +58,7 @@ let dbPromise = null;
 function openLocalDb() {
   dbPromise ??= new Promise((resolve, reject) => {
     // Version 2 adds the "folders" store. Upgrading keeps every existing class, line and note.
-    const open = indexedDB.open("class-notes", 2);
+    const open = indexedDB.open("class-notes", 3);
     open.onupgradeneeded = () => {
       const db = open.result;
       const has = (n) => db.objectStoreNames.contains(n);
@@ -66,6 +66,8 @@ function openLocalDb() {
       if (!has("chunks")) db.createObjectStore("chunks", { keyPath: "id", autoIncrement: true }).createIndex("bySession", "sessionId");
       if (!has("notes")) db.createObjectStore("notes", { keyPath: "id", autoIncrement: true }).createIndex("bySession", "sessionId");
       if (!has("folders")) db.createObjectStore("folders", { keyPath: "id", autoIncrement: true });
+      // Version 3: attached files (photos, PDFs, slides, video). The file itself is stored in the row.
+      if (!has("files")) db.createObjectStore("files", { keyPath: "id", autoIncrement: true }).createIndex("bySession", "sessionId");
     };
     open.onsuccess = () => resolve(open.result);
     open.onerror = () => reject(open.error);
@@ -102,8 +104,8 @@ const local = {
   // Delete one class AND everything that belongs to it in a single transaction: all or nothing.
   async deleteSession(id) {
     const db = await openLocalDb();
-    const tx = db.transaction(["sessions", "chunks", "notes"], "readwrite");
-    for (const name of ["chunks", "notes"]) {
+    const tx = db.transaction(["sessions", "chunks", "notes", "files"], "readwrite");
+    for (const name of ["chunks", "notes", "files"]) {
       const s = tx.objectStore(name);
       const keys = await asPromise(s.index("bySession").getAllKeys(id));
       for (const key of keys) s.delete(key);
@@ -125,7 +127,7 @@ const local = {
 // auth.uid()), and the security rules only show you your own rows.
 // =====================================================================================
 let sb = null; // the Supabase client, created after the library loads
-const TABLES = { sessions: "class_sessions", chunks: "class_chunks", notes: "class_notes", folders: "class_folders" };
+const TABLES = { sessions: "class_sessions", chunks: "class_chunks", notes: "class_notes", folders: "class_folders", files: "class_files" };
 
 const cloud = {
   async add(kind, obj) {
@@ -609,6 +611,7 @@ async function deleteClass(id) {
     // that no longer exists.
     await saveQueue.catch(() => {});
     while (busy) await new Promise((r) => setTimeout(r, 200));
+    await removeStoredFiles(id); // online files live in storage, outside the tables, so they are removed by hand
     await dbDeleteSession(id);
     setStatus(`Deleted "${session.title}".`);
     await refresh();
@@ -875,6 +878,93 @@ async function resumeClass(session) {
 }
 
 
+
+// ---------- attached files ----------
+// Photos, PDFs, slides and videos can be attached to a class. Online they go to a private Supabase Storage
+// bucket (each person can only reach their own folder: <user id>/<class id>/...) and a row in class_files
+// remembers the name, type and size. On this device they are kept inside IndexedDB.
+const BUCKET = "class-files";
+const FILE_MAX = 50 * 1024 * 1024; // 50 MB each (also the bucket's limit)
+const AI_FILE_MAX_TOTAL = 12 * 1024 * 1024, AI_FILE_COUNT = 4;
+
+const filesOf = (sessionId) => dbBySession("files", sessionId);
+
+async function addFile(sessionId, file) {
+  if (file.size > FILE_MAX) throw new Error(`"${file.name}" is bigger than 50 MB.`);
+  const row = { sessionId, name: file.name, mime: file.type || "application/octet-stream", size: file.size };
+  if (store === local) return dbAdd("files", { ...row, blob: file, ts: Date.now() });
+  const safe = file.name.replace(/[^\w.\-]+/g, "_").slice(-80) || "file";
+  const path = `${activeUserId}/${sessionId}/${crypto.randomUUID()}-${safe}`;
+  const up = await sb.storage.from(BUCKET).upload(path, file, { contentType: row.mime, upsert: false });
+  if (up.error) throw up.error;
+  try { return await dbAdd("files", { ...row, path }); }
+  catch (err) { await sb.storage.from(BUCKET).remove([path]).catch(() => {}); throw err; }
+}
+
+async function fileUrl(f, { download = false } = {}) {
+  if (store === local) return URL.createObjectURL(f.blob);
+  const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(f.path, 3600, download ? { download: f.name } : undefined);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+async function fileBlob(f) {
+  if (store === local) return f.blob;
+  const { data, error } = await sb.storage.from(BUCKET).download(f.path);
+  if (error) throw error;
+  return data;
+}
+
+async function removeFile(f) {
+  if (store === cloud) {
+    const { error } = await sb.storage.from(BUCKET).remove([f.path]);
+    if (error) throw error;
+  }
+  await dbDel("files", f.id);
+}
+
+async function removeStoredFiles(sessionId) {
+  if (store !== cloud) return; // the device database deletes them together with the class
+  try {
+    const paths = (await filesOf(sessionId)).map((f) => f.path).filter(Boolean);
+    if (paths.length) await sb.storage.from(BUCKET).remove(paths);
+  } catch { /* the files table may not exist yet; nothing to clean up then */ }
+}
+
+const toBase64 = (blob) => new Promise((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
+  r.onerror = () => reject(r.error);
+  r.readAsDataURL(blob);
+});
+
+// Gemini can read images and PDFs sent along with the question. (Slides and videos are kept, but not read.)
+async function askGeminiWithFiles(prompt, files) {
+  const parts = [{ text: prompt }];
+  for (const f of files) parts.push({ inlineData: { mimeType: f.mime, data: await toBase64(await fileBlob(f)) } });
+  const res = await getClient().models.generateContent({ model: MODEL, contents: [{ role: "user", parts }] });
+  const text = (res.text ?? "").trim();
+  if (!text) throw new Error("Gemini returned an empty answer. Try again.");
+  return text;
+}
+
+async function askAbout(ids, question) {
+  let prompt = askPrompt(await classContext(ids), question);
+  let used = [];
+  if (ids.length === 1) {
+    let total = 0;
+    try {
+      for (const f of await filesOf(ids[0])) {
+        if (!/^(image\/|application\/pdf$)/.test(f.mime) || used.length >= AI_FILE_COUNT || total + f.size > AI_FILE_MAX_TOTAL) continue;
+        used.push(f); total += f.size;
+      }
+    } catch { used = []; } // files are not set up online yet: answer from the notes alone
+  }
+  if (!used.length) return { text: await askGemini(prompt), files: [] };
+  prompt += `\n\nThe student also attached these files to this class: ${used.map((f) => f.name).join(", ")}. They are included with this message. Treat them as class material: use them under "From class" and name the file you used.`;
+  return { text: await askGeminiWithFiles(prompt, used), files: used.map((f) => f.name) };
+}
+
 // =====================================================================================
 // THE API FOR THE CLASS NOTES PAGE (library.js)
 // library.js draws the sidebar page (folders, class list, chat). It never touches the database or Gemini
@@ -930,7 +1020,8 @@ window.cnApi = {
   get userKey() { return store === cloud ? String(activeUserId) : "device"; },
   get where() { return store === cloud ? "your online account" : "this device"; },
   notesFor, chunksFor: (id) => dbBySession("chunks", id),
-  ask: async (ids, question) => askGemini(askPrompt(await classContext(ids), question)),
+  ask: askAbout,
+  files: filesOf, addFile, fileUrl, removeFile, FILE_MAX,
   catchUp: catchUpClass, updateNotes: updateNotesNow, exportMarkdown, continueClass,
   rename: renameClass, remove: deleteClass,
   async createFolder(name) {

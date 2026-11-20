@@ -94,6 +94,7 @@ export function transcriptText(chunks) {
 export const COLS = {
   sessions: { startedAt: "started_at", endedAt: "ended_at", folderId: "folder_id" },
   folders: {},
+  files: { sessionId: "session_id" },
   chunks: { sessionId: "session_id" },
   notes: { sessionId: "session_id", fromTs: "from_ts", toTs: "to_ts", toChunkId: "to_chunk_id" },
 };
